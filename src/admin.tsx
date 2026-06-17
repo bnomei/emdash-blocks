@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent } from "react";
+import { safeLinkHref } from "./linkProtocols";
 import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
@@ -539,9 +540,14 @@ function parseInlineMarkdown(text: string): {
     } else if (match[6] != null) {
       children.push(makeSpan(match[6], ["code"]));
     } else if (match[8] != null && match[9] != null) {
-      const key = randomId("link");
-      markDefs.push({ _key: key, _type: "link", href: match[9] });
-      children.push(makeSpan(match[8], [key]));
+      const href = safeLinkHref(match[9]);
+      if (href) {
+        const key = randomId("link");
+        markDefs.push({ _key: key, _type: "link", href });
+        children.push(makeSpan(match[8], [key]));
+      } else {
+        children.push(makeSpan(match[8]));
+      }
     } else if (match[11] != null) {
       children.push(makeSpan(match[11], ["strike-through"]));
     }
@@ -609,7 +615,10 @@ function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[])
       if (marks.includes("em")) html = `<em>${html}</em>`;
       if (marks.includes("strike-through") || marks.includes("strikethrough"))
         html = `<s>${html}</s>`;
-      if (link?.href) html = `<a href="${escapeAttribute(link.href)}">${html}</a>`;
+      if (link?.href) {
+        const href = safeLinkHref(link.href);
+        if (href) html = `<a href="${escapeAttribute(href)}">${html}</a>`;
+      }
       return html.replace(/\n/g, "<br>");
     })
     .join("");
@@ -715,7 +724,7 @@ function inlineNodesToSpans(
     if (tag === "code") nextMarks.push("code");
     if (tag === "s" || tag === "del" || tag === "strike") nextMarks.push("strike-through");
     if (tag === "a") {
-      const href = node.getAttribute("href") ?? "";
+      const href = safeLinkHref(node.getAttribute("href") ?? "");
       if (href) {
         const key = randomId("link");
         markDefs.push({ _key: key, _type: "link", href });
@@ -918,7 +927,14 @@ function PortableTextPropField({
   function createLink() {
     const href = globalThis.prompt?.("Link URL");
     if (!href) return;
-    runCommand("createLink", href);
+    const safeHref = safeLinkHref(href);
+    if (!safeHref) {
+      globalThis.alert?.(
+        "Links must use http:, https:, mailto:, tel:, root-relative, or relative URLs.",
+      );
+      return;
+    }
+    runCommand("createLink", safeHref);
   }
 
   const toolbarButtons = [

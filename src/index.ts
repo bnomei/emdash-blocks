@@ -10,6 +10,7 @@ export type {
   BlockBuilderProps,
   BlockBuilderValue,
 } from "./types";
+export { isSafeLinkHref, safeLinkHref } from "./linkProtocols";
 export {
   blockProps,
   isBlockBuilderBlock,
