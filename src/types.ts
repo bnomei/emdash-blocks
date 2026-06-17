@@ -58,3 +58,9 @@ export type BlockBuilderBlock = {
 };
 
 export type BlockBuilderValue = BlockBuilderBlock[];
+
+export type BlockBuilderOptions = {
+  blockTypes?: BlockBuilderDefinition[];
+  blockDefinitions?: BlockBuilderDefinition[];
+  helpText?: string;
+};

@@ -22,6 +22,7 @@ import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
   BlockBuilderDefinition,
+  BlockBuilderOptions,
   BlockBuilderPropChoice,
   BlockBuilderPropField,
   BlockBuilderProps,
@@ -33,12 +34,6 @@ type FieldWidgetProps<TOptions = Record<string, unknown>> = {
   onChange: (value: unknown) => void;
   id?: string;
   options?: TOptions;
-};
-
-type BlockBuilderOptions = {
-  blockTypes?: BlockBuilderDefinition[];
-  blockDefinitions?: BlockBuilderDefinition[];
-  helpText?: string;
 };
 
 type MediaValue = {
