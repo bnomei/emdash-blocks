@@ -23,6 +23,7 @@ import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
   BlockBuilderDefinition,
+  BlockBuilderOptions,
   BlockBuilderPropChoice,
   BlockBuilderPropField,
   BlockBuilderProps,
@@ -34,12 +35,6 @@ type FieldWidgetProps<TOptions = Record<string, unknown>> = {
   onChange: (value: unknown) => void;
   id?: string;
   options?: TOptions;
-};
-
-type BlockBuilderOptions = {
-  blockTypes?: BlockBuilderDefinition[];
-  blockDefinitions?: BlockBuilderDefinition[];
-  helpText?: string;
 };
 
 type MediaValue = {
@@ -304,12 +299,22 @@ function asBlocks(value: unknown): BlockBuilderValue {
   return Array.isArray(value) ? value.map((item, index) => normalizeBlock(item, index)) : [];
 }
 
-function parseJsonValue(value: string): unknown {
+export type JsonDraftParseResult = { ok: true; value: unknown } | { ok: false; error: string };
+
+export function parseJsonDraft(value: string): JsonDraftParseResult {
   try {
-    return value.trim() ? JSON.parse(value) : undefined;
-  } catch {
-    return undefined;
+    return { ok: true, value: value.trim() ? JSON.parse(value) : undefined };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Invalid JSON",
+    };
   }
+}
+
+function parseJsonValue(value: string): unknown {
+  const result = parseJsonDraft(value);
+  return result.ok ? result.value : undefined;
 }
 
 function parseProps(value: string): BlockBuilderProps | null {
@@ -1158,6 +1163,67 @@ function renderPropField(
   );
 }
 
+function JsonLikePropField({
+  field,
+  value,
+  onChange,
+  id,
+  fallbackHelpText,
+}: {
+  field: BlockBuilderPropField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  id: string;
+  fallbackHelpText: string;
+}) {
+  const valueKey = JSON.stringify(value ?? null);
+  const [draft, setDraft] = useState(() =>
+    value === undefined ? "" : JSON.stringify(value, null, 2),
+  );
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
+    setParseError(null);
+  }, [valueKey]);
+
+  function commit(nextDraft: string) {
+    const result = parseJsonDraft(nextDraft);
+    if (result.ok) {
+      setParseError(null);
+      onChange(result.value);
+    } else {
+      setParseError(result.error);
+    }
+  }
+
+  return (
+    <label key={field.key} htmlFor={id} style={fieldStyle}>
+      <span style={labelStyle}>{field.label}</span>
+      <Textarea
+        id={id}
+        aria-label={field.label}
+        aria-invalid={parseError ? true : undefined}
+        aria-describedby={parseError ? `${id}-json-error` : undefined}
+        className="min-h-24 w-full font-mono text-sm"
+        placeholder={field.placeholder}
+        value={draft}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          setDraft(event.currentTarget.value);
+          if (parseError) commit(event.currentTarget.value);
+        }}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => commit(event.currentTarget.value)}
+      />
+      {parseError ? (
+        <small id={`${id}-json-error`} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
+          Invalid JSON: {parseError}
+        </small>
+      ) : null}
+      <small style={helpTextStyle}>{field.helpText ?? fallbackHelpText}</small>
+    </label>
+  );
+}
+
 function renderJsonLikePropField(
   field: BlockBuilderPropField,
   value: unknown,
@@ -1166,21 +1232,14 @@ function renderJsonLikePropField(
   fallbackHelpText: string,
 ) {
   return (
-    <label key={field.key} htmlFor={id} style={fieldStyle}>
-      <span style={labelStyle}>{field.label}</span>
-      <Textarea
-        id={id}
-        aria-label={field.label}
-        className="min-h-24 w-full font-mono text-sm"
-        placeholder={field.placeholder}
-        defaultValue={value === undefined ? "" : JSON.stringify(value, null, 2)}
-        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
-          const nextValue = parseJsonValue(event.currentTarget.value);
-          onChange(nextValue);
-        }}
-      />
-      <small style={helpTextStyle}>{field.helpText ?? fallbackHelpText}</small>
-    </label>
+    <JsonLikePropField
+      key={field.key}
+      field={field}
+      value={value}
+      onChange={onChange}
+      id={id}
+      fallbackHelpText={fallbackHelpText}
+    />
   );
 }
 
