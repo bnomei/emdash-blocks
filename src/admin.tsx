@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent } from "react";
+import { editorCommandAdapter } from "./editorCommandAdapter";
 import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
@@ -909,14 +910,13 @@ function PortableTextPropField({
   }
 
   function runCommand(command: string, commandValue?: string) {
-    editorRef.current?.focus();
-    globalThis.document?.execCommand(command, false, commandValue);
+    editorCommandAdapter.dispatchCommand(editorRef.current, command, commandValue);
     setHtml(editorRef.current?.innerHTML ?? "");
     commit();
   }
 
   function createLink() {
-    const href = globalThis.prompt?.("Link URL");
+    const href = editorCommandAdapter.requestLinkHref();
     if (!href) return;
     runCommand("createLink", href);
   }
