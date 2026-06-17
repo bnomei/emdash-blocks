@@ -4,6 +4,7 @@ export type {
   BlockBuilderBlock,
   BlockBuilderCoreFieldType,
   BlockBuilderDefinition,
+  BlockBuilderOptions,
   BlockBuilderPropChoice,
   BlockBuilderPropField,
   BlockBuilderPropFieldType,

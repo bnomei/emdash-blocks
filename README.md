@@ -68,7 +68,33 @@ Use the widget on an EmDash `json` field:
 ```
 
 Use `blockDefinitions` when the editor should render typed prop controls instead
-of the raw JSON fallback:
+of the raw JSON fallback. TypeScript schemas can import `BlockBuilderOptions`
+from the public package entry to type field options:
+
+```ts
+import type { BlockBuilderOptions } from "@bnomei/emdash-blocks";
+
+const blockOptions: BlockBuilderOptions = {
+  blockDefinitions: [
+    {
+      type: "heading",
+      label: "Heading",
+      props: [
+        { key: "text", label: "Text", type: "text" },
+        {
+          key: "level",
+          label: "Level",
+          type: "select",
+          defaultValue: "h2",
+          options: ["h1", "h2", "h3", "h4"],
+        },
+      ],
+    },
+  ],
+};
+```
+
+The same options can be used directly in JSON schemas:
 
 ```json
 {
