@@ -45,9 +45,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vp pack src/index.ts src/admin.tsx --format esm --dts --clean --tsconfig tsconfig.json",
+    "build": "vp pack src/index.ts src/admin.tsx src/adminTransforms.ts --format esm --dts --clean --tsconfig tsconfig.json",
     "check": "vp check .",
-    "pack:check": "vp pack src/index.ts src/admin.tsx --format esm --dts --clean --tsconfig tsconfig.json --publint",
+    "pack:check": "vp pack src/index.ts src/admin.tsx src/adminTransforms.ts --format esm --dts --clean --tsconfig tsconfig.json --publint",
     "prepack": "npm run build",
     "prepublishOnly": "npm run check && npm run typecheck && npm run pack:check && npm run types:check",
     "types:check": "attw --pack . --profile esm-only --no-summary",
