@@ -101,12 +101,16 @@ Supported prop field types include all 16 EmDash field types: `string`, `text`,
 `url`, `number`, `integer`, `boolean`, `datetime`, `select`, `multiSelect`,
 `portableText`, `image`, `file`, `reference`, `json`, `slug`, and `repeater`.
 
-The block builder also supports generic block-editor field types:
-`markdown`, `textarea`, `color`, `media`, and `media-list`.
-`portableText`, `repeater`, `media`, and `media-list` currently render as
-JSON-backed fields until stable embeddable EmDash editors/pickers are available.
-`image`, `file`, and `reference` render as ID fields, matching EmDash's storage
-model for those field types.
+The block builder also supports generic block-editor field types: `writer`,
+`markdown`, `textarea`, `color`, `media`, and `media-list`. Text-like fields
+render as text inputs or textareas, numeric fields normalize numeric values,
+`boolean` renders as a switch, `select` and `multiSelect` render choice controls,
+and `portableText`/`writer` render the built-in rich text editor with paragraph,
+heading, quote, bold, italic, list, and link controls. `media` and `media-list`
+render media-library selectors backed by EmDash media values. `json` and
+`repeater` use focused JSON editors, with `repeater` stored as a JSON array until
+a dedicated repeater UI is available. `image`, `file`, `reference`, and `slug`
+render ID/text inputs that match EmDash's stored values for those field types.
 
 Project-specific block types should be supplied through field options, or from a
 site-local helper/plugin that writes those options. Keep the publishable block
