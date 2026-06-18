@@ -43,8 +43,11 @@ jobs:
       - name: Run TypeScript
         run: npm run typecheck
 
+      - name: Run tests
+        run: npm test
+
       - name: Validate VitePlus package build
-        run: npx vp pack src/index.ts src/admin.tsx --format esm --dts --clean --tsconfig tsconfig.json --publint
+        run: npm run pack:check
 
       - name: Validate published types
         run: npm run types:check

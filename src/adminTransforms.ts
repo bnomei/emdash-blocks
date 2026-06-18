@@ -64,6 +64,8 @@ export type PortableTextBlock = {
 
 export type JsonDraftParseResult = { ok: true; value: unknown } | { ok: false; error: string };
 
+const TEXT_NODE = 3;
+
 type TextNodeLike = {
   nodeType: number;
   textContent?: string | null;
@@ -463,7 +465,7 @@ function appendPortableTextNode(
   node: ChildNode | TextNodeLike | ElementLike,
   blocks: PortableTextBlock[],
 ) {
-  if (isTextNodeLike(node) && node.nodeType === Node.TEXT_NODE) {
+  if (isTextNodeLike(node) && node.nodeType === TEXT_NODE) {
     const text = node.textContent ?? "";
     if (text.trim()) blocks.push(makeTextBlock(text));
     return;
@@ -529,7 +531,7 @@ function inlineNodesToSpans(
   const spans: PortableTextSpan[] = [];
 
   for (const node of nodes) {
-    if (isTextNodeLike(node) && node.nodeType === Node.TEXT_NODE) {
+    if (isTextNodeLike(node) && node.nodeType === TEXT_NODE) {
       spans.push(makeSpan(node.textContent ?? "", marks));
       continue;
     }

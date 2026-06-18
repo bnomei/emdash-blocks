@@ -1,6 +1,6 @@
 {
   "name": "@bnomei/emdash-blocks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JSON block-list field widget for EmDash entries, with normalized block props and visibility state.",
   "keywords": [
     "astro",
@@ -49,10 +49,10 @@
     "check": "vp check .",
     "pack:check": "vp pack src/index.ts src/admin.tsx src/adminTransforms.ts --format esm --dts --clean --tsconfig tsconfig.json --publint",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run check && npm run typecheck && npm run pack:check && npm run types:check",
+    "prepublishOnly": "npm run check && npm run typecheck && npm test && npm run pack:check && npm run types:check",
     "types:check": "attw --pack . --profile esm-only --no-summary",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test test/*.mjs"
+    "test": "npm run build && node --test test/*.mjs && vp test src/editorCommandAdapter.test.ts"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.3",

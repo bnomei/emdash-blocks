@@ -22,6 +22,8 @@ const rejected = [
   "data:text/html,<script>alert(1)</script>",
   "ftp://example.com/file",
   "//example.com/protocol-relative",
+  "\\\\example.com/protocol-relative-backslash",
+  "/\\example.com/protocol-relative-mixed",
   "vbscript:msgbox(1)",
 ];
 

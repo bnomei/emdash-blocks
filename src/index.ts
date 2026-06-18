@@ -31,7 +31,7 @@ export type BlockBuilderDescriptorOptions = {
 };
 
 const PLUGIN_ID = "block-builder";
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.1.1";
 const PACKAGE_NAME = "@bnomei/emdash-blocks";
 
 export function blockBuilderPlugin(options: BlockBuilderDescriptorOptions = {}): PluginDescriptor {

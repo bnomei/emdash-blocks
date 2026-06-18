@@ -242,9 +242,7 @@ test("renders portable text as escaped editor HTML with sanitized links and list
 });
 
 test("converts editor HTML nodes to portable text blocks", () => {
-  const previousNode = globalThis.Node;
   const previousHTMLElement = globalThis.HTMLElement;
-  globalThis.Node = { TEXT_NODE: 3 };
   globalThis.HTMLElement = TestElement;
 
   try {
@@ -282,7 +280,6 @@ test("converts editor HTML nodes to portable text blocks", () => {
     assert.equal(blocks[3].listItem, "bullet");
     assert.deepEqual(spanWithText(blocks[3], "Two").marks, ["em"]);
   } finally {
-    globalThis.Node = previousNode;
     globalThis.HTMLElement = previousHTMLElement;
   }
 });

@@ -12,7 +12,8 @@ function compactSchemeCandidate(value: string): string {
 export function isSafeLinkHref(value: string): boolean {
   const href = value.trim();
   if (!href) return false;
-  if (href.startsWith("//")) return false;
+  const slashNormalizedHref = href.replace(/\\/g, "/");
+  if (slashNormalizedHref.startsWith("//")) return false;
 
   const compactHref = compactSchemeCandidate(href);
   const scheme = compactHref.match(/^[a-zA-Z][a-zA-Z\d+.-]*:/)?.[0].toLowerCase();
