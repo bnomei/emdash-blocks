@@ -1,5 +1,20 @@
 import { definePlugin, type PluginDescriptor } from "emdash";
+import { blockMessage, type BlocksI18nConfig } from "./i18n";
 
+export type {
+  BlocksI18nConfig,
+  BlocksI18nMessages,
+  BlocksMessageKey,
+  LocalizedString,
+} from "./i18n";
+export {
+  DEFAULT_BLOCKS_I18N,
+  DEFAULT_LOCALE,
+  blockMessage,
+  formatBlockMessage,
+  localeFallbacks,
+  localizedString,
+} from "./i18n";
 export type {
   BlockBuilderBlock,
   BlockBuilderCoreFieldType,
@@ -28,10 +43,11 @@ export {
 export type BlockBuilderDescriptorOptions = {
   entrypoint?: string;
   adminEntry?: string;
+  i18n?: BlocksI18nConfig;
 };
 
 const PLUGIN_ID = "block-builder";
-const PLUGIN_VERSION = "0.1.1";
+const PLUGIN_VERSION = "0.2.0";
 const PACKAGE_NAME = "@bnomei/emdash-blocks";
 
 export function blockBuilderPlugin(options: BlockBuilderDescriptorOptions = {}): PluginDescriptor {
@@ -44,17 +60,21 @@ export function blockBuilderPlugin(options: BlockBuilderDescriptorOptions = {}):
     format: "native",
     entrypoint,
     adminEntry,
-    options: { adminEntry },
+    options: { adminEntry, i18n: options.i18n },
   };
 }
 
-export function createPlugin(options: Pick<BlockBuilderDescriptorOptions, "adminEntry"> = {}) {
+export function createPlugin(
+  options: Pick<BlockBuilderDescriptorOptions, "adminEntry" | "i18n"> = {},
+) {
   return definePlugin({
     id: PLUGIN_ID,
     version: PLUGIN_VERSION,
     admin: {
       entry: options.adminEntry ?? `${PACKAGE_NAME}/admin`,
-      fieldWidgets: [{ name: "blocks", label: "Blocks", fieldTypes: ["json"] }],
+      fieldWidgets: [
+        { name: "blocks", label: blockMessage("blocks", options.i18n), fieldTypes: ["json"] },
+      ],
     },
   });
 }

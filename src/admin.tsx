@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ChangeEvent } from "react";
+import { useAdminLocale } from "./admin-locale";
 import {
   blockWithType,
   createBlockForDefinition,
@@ -48,6 +49,7 @@ import type {
   BlockBuilderProps,
   BlockBuilderValue,
 } from "./types";
+import { blockMessage, formatBlockMessage, localizedString, type BlocksI18nConfig } from "./i18n";
 
 export { parseJsonDraft } from "./adminTransforms";
 
@@ -236,8 +238,16 @@ function visualAnchorId(baseId: string, ...segments: string[]) {
   return [baseId, ...segments.map((segment) => encodeURIComponent(segment))].join(":");
 }
 
-function selectItems(options: BlockBuilderDefinition[]) {
-  return options.map((option) => ({ value: option.type, label: option.label ?? option.type }));
+function useBlockI18n(i18n: BlocksI18nConfig | undefined): BlocksI18nConfig {
+  const locale = useAdminLocale(i18n?.locale ?? i18n?.defaultLocale);
+  return { ...i18n, locale };
+}
+
+function selectItems(options: BlockBuilderDefinition[], i18n: BlocksI18nConfig) {
+  return options.map((option) => ({
+    value: option.type,
+    label: localizedString(option.label, i18n, option.type),
+  }));
 }
 
 function compactControlWidth(values: string[], min = 10, max = 32) {
@@ -271,12 +281,14 @@ function MediaPropField({
   onChange,
   id,
   multiple,
+  i18n,
 }: {
   field: BlockBuilderPropField;
   value: unknown;
   onChange: (value: unknown) => void;
   id: string;
   multiple: boolean;
+  i18n: BlocksI18nConfig;
 }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -289,7 +301,10 @@ function MediaPropField({
     return [...known.values()];
   }, [items, selected]);
   const selectItemsForMedia = [
-    { value: "", label: multiple ? "Add media" : "No media" },
+    {
+      value: "",
+      label: multiple ? blockMessage("addMedia", i18n) : blockMessage("noMedia", i18n),
+    },
     ...allItems.map((item) => {
       const value = "storageKey" in item ? item.id : mediaIdentity(item);
       const label = "storageKey" in item ? item.filename : mediaSelectLabel(item);
@@ -357,7 +372,7 @@ function MediaPropField({
 
   return (
     <div key={field.key} id={id} style={fieldStyle}>
-      <span style={labelStyle}>{field.label}</span>
+      <span style={labelStyle}>{localizedString(field.label, i18n)}</span>
       {selected.length ? (
         <div style={mediaPreviewGridStyle}>
           {selected.map((item) => {
@@ -381,7 +396,7 @@ function MediaPropField({
                   icon={TrashIcon}
                   onClick={() => removeMedia(identity)}
                 >
-                  Remove
+                  {blockMessage("remove", i18n)}
                 </Button>
               </div>
             );
@@ -389,17 +404,21 @@ function MediaPropField({
         </div>
       ) : null}
       <Select
-        aria-label={field.label}
+        aria-label={localizedString(field.label, i18n)}
         className="w-full"
         items={selectItemsForMedia}
         value={multiple ? "" : selected[0] ? mediaIdentity(selected[0]) : ""}
         onValueChange={(nextValue) => selectMedia(String(nextValue))}
       />
-      {status === "loading" ? <small style={helpTextStyle}>Loading media...</small> : null}
-      {status === "error" ? (
-        <small style={helpTextStyle}>Could not load media library.</small>
+      {status === "loading" ? (
+        <small style={helpTextStyle}>{blockMessage("loadingMedia", i18n)}</small>
       ) : null}
-      {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+      {status === "error" ? (
+        <small style={helpTextStyle}>{blockMessage("couldNotLoadMedia", i18n)}</small>
+      ) : null}
+      {field.helpText ? (
+        <small style={helpTextStyle}>{localizedString(field.helpText, i18n)}</small>
+      ) : null}
     </div>
   );
 }
@@ -409,11 +428,13 @@ function PortableTextPropField({
   value,
   onChange,
   id,
+  i18n,
 }: {
   field: BlockBuilderPropField;
   value: unknown;
   onChange: (value: unknown) => void;
   id: string;
+  i18n: BlocksI18nConfig;
 }) {
   const valueKey = JSON.stringify(value ?? null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -443,27 +464,48 @@ function PortableTextPropField({
     if (!href) return;
     const safeHref = safeLinkHref(href);
     if (!safeHref) {
-      globalThis.alert?.(
-        "Links must use http:, https:, mailto:, tel:, root-relative, or relative URLs.",
-      );
+      globalThis.alert?.(blockMessage("linkProtocolError", i18n));
       return;
     }
     runCommand("createLink", safeHref);
   }
 
   const toolbarButtons = [
-    { label: "Paragraph", icon: ParagraphIcon, command: "formatBlock", value: "p" },
-    { label: "Heading", icon: TextHThreeIcon, command: "formatBlock", value: "h3" },
-    { label: "Quote", icon: QuotesIcon, command: "formatBlock", value: "blockquote" },
-    { label: "Bold", icon: TextBIcon, command: "bold" },
-    { label: "Italic", icon: TextItalicIcon, command: "italic" },
-    { label: "Bulleted list", icon: ListBulletsIcon, command: "insertUnorderedList" },
-    { label: "Numbered list", icon: ListNumbersIcon, command: "insertOrderedList" },
+    {
+      label: blockMessage("paragraph", i18n),
+      icon: ParagraphIcon,
+      command: "formatBlock",
+      value: "p",
+    },
+    {
+      label: blockMessage("heading", i18n),
+      icon: TextHThreeIcon,
+      command: "formatBlock",
+      value: "h3",
+    },
+    {
+      label: blockMessage("quote", i18n),
+      icon: QuotesIcon,
+      command: "formatBlock",
+      value: "blockquote",
+    },
+    { label: blockMessage("bold", i18n), icon: TextBIcon, command: "bold" },
+    { label: blockMessage("italic", i18n), icon: TextItalicIcon, command: "italic" },
+    {
+      label: blockMessage("bulletedList", i18n),
+      icon: ListBulletsIcon,
+      command: "insertUnorderedList",
+    },
+    {
+      label: blockMessage("numberedList", i18n),
+      icon: ListNumbersIcon,
+      command: "insertOrderedList",
+    },
   ];
 
   return (
     <div key={field.key} style={fieldStyle}>
-      <span style={labelStyle}>{field.label}</span>
+      <span style={labelStyle}>{localizedString(field.label, i18n)}</span>
       <div style={writerShellStyle}>
         <div style={writerToolbarStyle}>
           {toolbarButtons.map((button) => (
@@ -485,8 +527,8 @@ function PortableTextPropField({
             size="sm"
             shape="square"
             variant="ghost"
-            title="Link"
-            aria-label="Link"
+            title={blockMessage("link", i18n)}
+            aria-label={blockMessage("link", i18n)}
             icon={LinkIcon}
             onMouseDown={(event) => event.preventDefault()}
             onClick={createLink}
@@ -496,7 +538,7 @@ function PortableTextPropField({
           ref={editorRef}
           id={id}
           role="textbox"
-          aria-label={field.label}
+          aria-label={localizedString(field.label, i18n)}
           aria-multiline="true"
           contentEditable
           suppressContentEditableWarning
@@ -507,7 +549,9 @@ function PortableTextPropField({
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
-      {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+      {field.helpText ? (
+        <small style={helpTextStyle}>{localizedString(field.helpText, i18n)}</small>
+      ) : null}
     </div>
   );
 }
@@ -517,20 +561,24 @@ function renderPropField(
   value: unknown,
   onChange: (value: unknown) => void,
   idPrefix: string,
+  i18n: BlocksI18nConfig,
 ) {
   const id = `${idPrefix}-${field.key}`;
   const type = field.type ?? "text";
   const stringValue = typeof value === "string" || typeof value === "number" ? String(value) : "";
+  const label = localizedString(field.label, i18n);
+  const helpText = localizedString(field.helpText, i18n);
+  const placeholder = localizedString(field.placeholder, i18n) || undefined;
 
   if (type === "boolean") {
     return (
       <div key={field.key} style={settingRowStyle}>
         <span style={settingTextStyle}>
-          <strong>{field.label}</strong>
-          {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+          <strong>{label}</strong>
+          {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
         </span>
         <Switch
-          aria-label={field.label}
+          aria-label={label}
           checked={Boolean(value)}
           controlFirst={false}
           variant="neutral"
@@ -543,18 +591,18 @@ function renderPropField(
   if (type === "select") {
     return (
       <div key={field.key} style={fieldStyle}>
-        <span style={labelStyle}>{field.label}</span>
+        <span style={labelStyle}>{label}</span>
         <Select
-          aria-label={field.label}
+          aria-label={label}
           className="w-full"
           items={choices(field.options).map((choice) => ({
             value: choice.value,
-            label: choice.label ?? choice.value,
+            label: localizedString(choice.label, i18n, choice.value),
           }))}
           value={typeof value === "string" ? value : ""}
           onValueChange={(nextValue) => onChange(String(nextValue))}
         />
-        {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+        {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
       </div>
     );
   }
@@ -564,12 +612,19 @@ function renderPropField(
     const selectChoices = choices(field.options);
 
     if (!selectChoices.length) {
-      return renderJsonLikePropField(field, value, onChange, id, "JSON string array");
+      return renderJsonLikePropField(
+        field,
+        value,
+        onChange,
+        id,
+        blockMessage("jsonStringArray", i18n),
+        i18n,
+      );
     }
 
     return (
       <div key={field.key} style={fieldStyle}>
-        <span style={labelStyle}>{field.label}</span>
+        <span style={labelStyle}>{label}</span>
         <div style={wrapperStyle}>
           {selectChoices.map((choice) => {
             const checked = selected.includes(choice.value);
@@ -588,12 +643,12 @@ function renderPropField(
                     );
                   }}
                 />
-                {choice.label ?? choice.value}
+                {localizedString(choice.label, i18n, choice.value)}
               </label>
             );
           })}
         </div>
-        {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+        {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
       </div>
     );
   }
@@ -601,18 +656,18 @@ function renderPropField(
   if (type === "text" || type === "markdown" || type === "textarea") {
     return (
       <label key={field.key} htmlFor={id} style={fieldStyle}>
-        <span style={labelStyle}>{field.label}</span>
+        <span style={labelStyle}>{label}</span>
         <Textarea
           id={id}
-          aria-label={field.label}
+          aria-label={label}
           className="min-h-24 w-full"
-          placeholder={field.placeholder}
+          placeholder={placeholder}
           value={typeof value === "string" ? value : ""}
           onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
             onChange(event.currentTarget.value)
           }
         />
-        {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+        {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
       </label>
     );
   }
@@ -625,14 +680,15 @@ function renderPropField(
         value={value}
         onChange={onChange}
         id={id}
+        i18n={i18n}
       />
     );
   }
 
   if (type === "json" || type === "repeater") {
     const fallback =
-      type === "repeater" ? "JSON array until a repeater prop editor is wired." : "JSON value";
-    return renderJsonLikePropField(field, value, onChange, id, fallback);
+      type === "repeater" ? blockMessage("jsonStringArray", i18n) : blockMessage("jsonValue", i18n);
+    return renderJsonLikePropField(field, value, onChange, id, fallback, i18n);
   }
 
   if (type === "media" || type === "media-list") {
@@ -644,18 +700,19 @@ function renderPropField(
         onChange={onChange}
         id={id}
         multiple={type === "media-list"}
+        i18n={i18n}
       />
     );
   }
 
   return (
     <label key={field.key} htmlFor={id} style={fieldStyle}>
-      <span style={labelStyle}>{field.label}</span>
+      <span style={labelStyle}>{label}</span>
       <Input
         id={id}
-        aria-label={field.label}
+        aria-label={label}
         className="w-full"
-        placeholder={field.placeholder}
+        placeholder={placeholder}
         type={inputType(field)}
         step={type === "integer" ? 1 : undefined}
         value={stringValue}
@@ -667,7 +724,7 @@ function renderPropField(
           }
         }}
       />
-      {field.helpText ? <small style={helpTextStyle}>{field.helpText}</small> : null}
+      {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
     </label>
   );
 }
@@ -678,12 +735,14 @@ function JsonLikePropField({
   onChange,
   id,
   fallbackHelpText,
+  i18n,
 }: {
   field: BlockBuilderPropField;
   value: unknown;
   onChange: (value: unknown) => void;
   id: string;
   fallbackHelpText: string;
+  i18n: BlocksI18nConfig;
 }) {
   const valueKey = JSON.stringify(value ?? null);
   const [draft, setDraft] = useState(() =>
@@ -708,14 +767,14 @@ function JsonLikePropField({
 
   return (
     <label key={field.key} htmlFor={id} style={fieldStyle}>
-      <span style={labelStyle}>{field.label}</span>
+      <span style={labelStyle}>{localizedString(field.label, i18n)}</span>
       <Textarea
         id={id}
-        aria-label={field.label}
+        aria-label={localizedString(field.label, i18n)}
         aria-invalid={parseError ? true : undefined}
         aria-describedby={parseError ? `${id}-json-error` : undefined}
         className="min-h-24 w-full font-mono text-sm"
-        placeholder={field.placeholder}
+        placeholder={localizedString(field.placeholder, i18n) || undefined}
         value={draft}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
           setDraft(event.currentTarget.value);
@@ -725,10 +784,12 @@ function JsonLikePropField({
       />
       {parseError ? (
         <small id={`${id}-json-error`} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
-          Invalid JSON: {parseError}
+          {formatBlockMessage("invalidJson", i18n, { error: parseError })}
         </small>
       ) : null}
-      <small style={helpTextStyle}>{field.helpText ?? fallbackHelpText}</small>
+      <small style={helpTextStyle}>
+        {localizedString(field.helpText, i18n) || fallbackHelpText}
+      </small>
     </label>
   );
 }
@@ -739,6 +800,7 @@ function renderJsonLikePropField(
   onChange: (value: unknown) => void,
   id: string,
   fallbackHelpText: string,
+  i18n: BlocksI18nConfig,
 ) {
   return (
     <JsonLikePropField
@@ -748,6 +810,7 @@ function renderJsonLikePropField(
       onChange={onChange}
       id={id}
       fallbackHelpText={fallbackHelpText}
+      i18n={i18n}
     />
   );
 }
@@ -757,14 +820,15 @@ function renderPropsEditor(
   props: BlockBuilderProps,
   onChange: (value: BlockBuilderProps) => void,
   idPrefix: string,
+  i18n: BlocksI18nConfig,
 ) {
   if (!definition?.props) {
     return (
       <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
-        <span style={labelStyle}>Props</span>
+        <span style={labelStyle}>{blockMessage("props", i18n)}</span>
         <Textarea
           id={`${idPrefix}-props`}
-          aria-label="Block props"
+          aria-label={blockMessage("blockProps", i18n)}
           className="min-h-28 w-full font-mono text-sm"
           defaultValue={JSON.stringify(props ?? {}, null, 2)}
           onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -777,7 +841,7 @@ function renderPropsEditor(
   }
 
   if (!definition.props.length) {
-    return <small style={helpTextStyle}>This block type has no editable props.</small>;
+    return <small style={helpTextStyle}>{blockMessage("noEditableProps", i18n)}</small>;
   }
 
   return (
@@ -788,6 +852,7 @@ function renderPropsEditor(
           props[field.key],
           (nextValue) => onChange({ ...props, [field.key]: nextValue }),
           idPrefix,
+          i18n,
         ),
       )}
     </div>
@@ -800,6 +865,7 @@ export function BlocksField({
   id = "block-builder",
   options,
 }: FieldWidgetProps<BlockBuilderOptions>) {
+  const i18n = useBlockI18n(options?.i18n);
   const blocks = normalizeEditorBlocks(value);
   const definitions = resolveBlockDefinitions(blocks, options);
 
@@ -825,7 +891,7 @@ export function BlocksField({
     <div id={id} tabIndex={-1} style={wrapperStyle}>
       {blocks.map((block, index) => {
         const definition = definitions.find((item) => item.type === block.type);
-        const blockTypeItems = selectItems(definitions);
+        const blockTypeItems = selectItems(definitions, i18n);
         const blockTypeLabel =
           blockTypeItems.find((item) => item.value === block.type)?.label ?? block.type;
         const propsId = `${id}-${index}-props`;
@@ -845,7 +911,7 @@ export function BlocksField({
               <div style={cardControlsStyle}>
                 <div
                   style={{
-                    width: `${compactControlWidth([blockTypeLabel, "Type"], 10, 28)}ch`,
+                    width: `${compactControlWidth([blockTypeLabel, blockMessage("type", i18n)], 10, 28)}ch`,
                   }}
                 >
                   <Select
@@ -869,7 +935,7 @@ export function BlocksField({
                           {
                             icon: <ArrowUpIcon size={14} />,
                             id: "move-up",
-                            tooltip: "Move block up",
+                            tooltip: blockMessage("moveBlockUp", i18n),
                             onClick: () => moveBlock(index, index - 1),
                           },
                         ]
@@ -879,7 +945,7 @@ export function BlocksField({
                           {
                             icon: <ArrowDownIcon size={14} />,
                             id: "move-down",
-                            tooltip: "Move block down",
+                            tooltip: blockMessage("moveBlockDown", i18n),
                             onClick: () => moveBlock(index, index + 1),
                           },
                         ]
@@ -887,13 +953,15 @@ export function BlocksField({
                     {
                       icon: block.hidden ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />,
                       id: "visibility",
-                      tooltip: block.hidden ? "Show block" : "Hide block",
+                      tooltip: block.hidden
+                        ? blockMessage("showBlock", i18n)
+                        : blockMessage("hideBlock", i18n),
                       onClick: () => updateBlock(index, { ...block, hidden: !block.hidden }),
                     },
                     {
                       icon: <TrashIcon size={14} />,
                       id: "remove",
-                      tooltip: "Remove block",
+                      tooltip: blockMessage("removeBlock", i18n),
                       onClick: () =>
                         updateBlocks(blocks.filter((_block, blockIndex) => blockIndex !== index)),
                     },
@@ -906,6 +974,7 @@ export function BlocksField({
               block.props ?? {},
               (props) => updateBlock(index, { ...block, props }),
               propsId,
+              i18n,
             )}
           </section>
         );
@@ -919,9 +988,11 @@ export function BlocksField({
           updateBlocks([...blocks, createBlockForDefinition(definitions[0], randomId)])
         }
       >
-        Add Block
+        {blockMessage("addBlock", i18n)}
       </Button>
-      {options?.helpText ? <small style={helpTextStyle}>{options.helpText}</small> : null}
+      {options?.helpText ? (
+        <small style={helpTextStyle}>{localizedString(options.helpText, i18n)}</small>
+      ) : null}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import type { BlocksI18nConfig, LocalizedString } from "./i18n";
+
 export type BlockBuilderProps = Record<string, unknown>;
 
 export type BlockBuilderCoreFieldType =
@@ -29,16 +31,16 @@ export type BlockBuilderPropFieldType =
 
 export type BlockBuilderPropChoice = {
   value: string;
-  label?: string;
+  label?: LocalizedString;
 };
 
 export type BlockBuilderPropField = {
   key: string;
-  label: string;
+  label: LocalizedString;
   type?: BlockBuilderPropFieldType;
   required?: boolean;
-  placeholder?: string;
-  helpText?: string;
+  placeholder?: LocalizedString;
+  helpText?: LocalizedString;
   options?: BlockBuilderPropChoice[] | string[];
   fields?: BlockBuilderPropField[];
   defaultValue?: unknown;
@@ -46,7 +48,7 @@ export type BlockBuilderPropField = {
 
 export type BlockBuilderDefinition = {
   type: string;
-  label?: string;
+  label?: LocalizedString;
   props?: BlockBuilderPropField[];
 };
 
@@ -62,5 +64,6 @@ export type BlockBuilderValue = BlockBuilderBlock[];
 export type BlockBuilderOptions = {
   blockTypes?: BlockBuilderDefinition[];
   blockDefinitions?: BlockBuilderDefinition[];
-  helpText?: string;
+  helpText?: LocalizedString;
+  i18n?: BlocksI18nConfig;
 };
