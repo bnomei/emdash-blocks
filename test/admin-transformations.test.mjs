@@ -323,6 +323,31 @@ test("renders portable text as escaped editor HTML with sanitized links and list
   );
 });
 
+test("portableTextToEditorHtml tolerates malformed stored blocks without throwing", () => {
+  // Non-array children, non-string text, non-array marks/markDefs, and a
+  // non-string href must degrade gracefully rather than crash the editor.
+  assert.doesNotThrow(() =>
+    portableTextToEditorHtml([
+      { _type: "block", _key: "k1", children: "oops" },
+      { _type: "block", _key: "k2", children: [{ _type: "span", _key: "s", text: 5 }] },
+      { _type: "block", _key: "k3", markDefs: "x", children: [{ _type: "span", _key: "s2", text: "hi", marks: ["m"] }] },
+      { _type: "block", _key: "k4", children: [null, { _type: "span", _key: "s3", text: "ok" }] },
+      {
+        _type: "block",
+        _key: "k5",
+        markDefs: [{ _key: "l", _type: "link", href: 5 }],
+        children: [{ _type: "span", _key: "s4", text: "x", marks: ["l"] }],
+      },
+    ]),
+  );
+
+  const html = portableTextToEditorHtml([
+    { _type: "block", _key: "k1", children: "oops" },
+    { _type: "block", _key: "k2", children: [{ _type: "span", _key: "s2", text: "kept" }] },
+  ]);
+  assert.match(html, /kept/);
+});
+
 test("encodes and restores nested list level across editor HTML", () => {
   const leveled = [
     {

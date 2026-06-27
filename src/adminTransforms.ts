@@ -458,7 +458,10 @@ export function portableTextToEditorHtml(value: unknown): string {
 
   for (const block of blocks) {
     if (block._type !== "block") continue;
-    const content = spansToHtml(block.children ?? [], block.markDefs ?? []);
+    const content = spansToHtml(
+      Array.isArray(block.children) ? block.children : [],
+      Array.isArray(block.markDefs) ? block.markDefs : [],
+    );
 
     if (block.listItem) {
       if (openList !== block.listItem) {
@@ -490,20 +493,25 @@ export function portableTextToEditorHtml(value: unknown): string {
 }
 
 function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[]): string {
-  return spans
+  // Stored portable text is untrusted (imports/migrations/API writes), so
+  // coerce every nested shape defensively: a non-array children/marks/markDefs
+  // or a non-string text must not throw during render and crash the editor.
+  const safeSpans = Array.isArray(spans) ? spans : [];
+  const safeMarkDefs = Array.isArray(markDefs) ? markDefs : [];
+  return safeSpans
     .map((span) => {
-      const marks = span.marks ?? [];
+      const marks = Array.isArray(span?.marks) ? span.marks : [];
       const link = marks
-        .map((mark) => markDefs.find((definition) => definition._key === mark))
+        .map((mark) => safeMarkDefs.find((definition) => definition?._key === mark))
         .find(Boolean);
-      let html = escapeHtml(span.text ?? "");
+      let html = escapeHtml(typeof span?.text === "string" ? span.text : "");
 
       if (marks.includes("code")) html = `<code>${html}</code>`;
       if (marks.includes("strong")) html = `<strong>${html}</strong>`;
       if (marks.includes("em")) html = `<em>${html}</em>`;
       if (marks.includes("strike-through") || marks.includes("strikethrough"))
         html = `<s>${html}</s>`;
-      if (link?.href) {
+      if (typeof link?.href === "string") {
         const href = safeLinkHref(link.href);
         if (href) html = `<a href="${escapeAttribute(href)}">${html}</a>`;
       }
