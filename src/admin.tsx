@@ -274,6 +274,17 @@ function normalizeNumber(value: string, integer: boolean) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+// Interpret stored boolean props for the switch's checked state. Migrated/raw
+// JSON can carry string sentinels; "false"/"0"/"" are logical false even though
+// they are truthy strings in JS.
+function normalizeBooleanValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized !== "" && normalized !== "false" && normalized !== "0";
+  }
+  return Boolean(value);
+}
+
 function NumberPropField({
   field,
   value,
@@ -656,7 +667,7 @@ function renderPropField(
         </span>
         <Switch
           aria-label={label}
-          checked={Boolean(value)}
+          checked={normalizeBooleanValue(value)}
           controlFirst={false}
           variant="neutral"
           onCheckedChange={(checked) => onChange(Boolean(checked))}
