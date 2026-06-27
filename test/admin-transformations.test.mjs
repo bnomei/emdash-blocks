@@ -133,6 +133,12 @@ test("normalizeEditorBlocks preserves a single stored block object", () => {
   assert.deepEqual(normalizeEditorBlocks({ foo: "bar" }), []);
   assert.deepEqual(normalizeEditorBlocks(null), []);
   assert.deepEqual(normalizeEditorBlocks("nope"), []);
+
+  // null/primitive/array slots are dropped, not turned into phantom blocks.
+  assert.deepEqual(
+    normalizeEditorBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
+    [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
+  );
 });
 
 test("normalizes media values from stored values and API items", () => {

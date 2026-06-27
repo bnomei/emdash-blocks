@@ -36,6 +36,12 @@ test("normalizes malformed blocks with stable fallback values", () => {
   assert.deepEqual(normalizeBlocks({ id: "hero-1", type: "heading", props: {} }), []);
   assert.deepEqual(normalizeBlocks("not-an-array"), []);
   assert.deepEqual(visibleBlocks({ id: "hero-1", type: "heading", props: {} }), []);
+
+  // null/primitive/array slots are dropped, not rendered as phantom blocks.
+  assert.deepEqual(
+    normalizeBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
+    [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
+  );
 });
 
 test("preserves valid block data and filters only hidden blocks", () => {

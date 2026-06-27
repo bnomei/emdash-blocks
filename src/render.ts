@@ -25,8 +25,10 @@ export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilde
 }
 
 export function normalizeBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
+  // Drop null/primitive/array slots so sparse or corrupted arrays do not
+  // render phantom empty text blocks.
   return Array.isArray(blocks)
-    ? blocks.map((block, index) => normalizeBlock(block, index))
+    ? blocks.filter(isRecord).map((block, index) => normalizeBlock(block, index))
     : [];
 }
 

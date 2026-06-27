@@ -114,9 +114,15 @@ export function normalizeEditorBlock(value: unknown, index: number): BlockBuilde
   };
 }
 
+function isBlockRecord(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
   if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeEditorBlock(item, index));
+    // Drop null/primitive/array slots so sparse or corrupted arrays do not
+    // materialize phantom empty text blocks that get persisted on save.
+    return value.filter(isBlockRecord).map((item, index) => normalizeEditorBlock(item, index));
   }
   // A single stored block object (a plausible migration/corruption shape) is
   // coerced into a one-element list so its content is shown and preserved,
