@@ -155,6 +155,14 @@ test("normalizes media values from stored values and API items", () => {
   assert.equal(mediaUrl(stored), "/_emdash/api/media/file/uploads/hero%20image.png");
   assert.equal(mediaUrl({ id: "asset/id" }), "/_emdash/api/media/file/asset%2Fid");
   assert.equal(
+    mediaUrl({ id: "x", meta: { storageKey: "../../sensitive" } }),
+    "/_emdash/api/media/file/sensitive",
+  );
+  assert.equal(
+    mediaUrl({ id: "x", meta: { storageKey: "uploads/../../etc/passwd" } }),
+    "/_emdash/api/media/file/uploads/etc/passwd",
+  );
+  assert.equal(
     mediaUrl({ id: "", src: "https://cdn.example/image.jpg" }),
     "https://cdn.example/image.jpg",
   );

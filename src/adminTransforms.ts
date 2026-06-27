@@ -231,7 +231,13 @@ export function mediaUrl(value: MediaValue): string {
 }
 
 export function encodeStorageKey(storageKey: string): string {
-  return storageKey.split("/").map(encodeURIComponent).join("/");
+  // Drop empty, "." and ".." segments so a stored storageKey cannot produce a
+  // path-traversal URL (e.g. "../../sensitive") when used as an <img src>.
+  return storageKey
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
+    .map(encodeURIComponent)
+    .join("/");
 }
 
 export function mediaValueFromItem(item: MediaItem): MediaValue {
