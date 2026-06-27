@@ -28,6 +28,7 @@ export type BlocksMessageKey =
   | "quote"
   | "remove"
   | "removeBlock"
+  | "repeaterMustBeArray"
   | "showBlock"
   | "type";
 
@@ -78,6 +79,7 @@ export const DEFAULT_BLOCKS_I18N = {
       quote: "Quote",
       remove: "Remove",
       removeBlock: "Remove block",
+      repeaterMustBeArray: "This field must be a JSON array.",
       showBlock: "Show block",
       type: "Type",
     },

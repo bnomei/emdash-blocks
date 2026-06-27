@@ -878,18 +878,26 @@ function JsonLikePropField({
 
   function commit(nextDraft: string) {
     const result = parseJsonDraft(nextDraft);
-    if (result.ok) {
-      setParseError(null);
-      // Repeater props are array-shaped; clearing the field (parsed as
-      // undefined) must persist [] rather than dropping the array type.
-      onChange(
-        field.type === "repeater" && (result.value === undefined || result.value === null)
-          ? []
-          : result.value,
-      );
-    } else {
-      setParseError(result.error);
+    if (!result.ok) {
+      setParseError(formatBlockMessage("invalidJson", i18n, { error: result.error }));
+      return;
     }
+    if (field.type === "repeater") {
+      // Repeater props are array-shaped. Clearing the field (undefined) or a
+      // literal null persists []; any other non-array (object/primitive) is
+      // rejected rather than breaking the array contract.
+      if (result.value === undefined || result.value === null) {
+        setParseError(null);
+        onChange([]);
+        return;
+      }
+      if (!Array.isArray(result.value)) {
+        setParseError(blockMessage("repeaterMustBeArray", i18n));
+        return;
+      }
+    }
+    setParseError(null);
+    onChange(result.value);
   }
 
   return (
@@ -917,7 +925,7 @@ function JsonLikePropField({
       />
       {parseError ? (
         <small id={`${id}-json-error`} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
-          {formatBlockMessage("invalidJson", i18n, { error: parseError })}
+          {parseError}
         </small>
       ) : null}
       <small style={helpTextStyle}>
