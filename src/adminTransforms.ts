@@ -1,4 +1,5 @@
 import { safeLinkHref } from "./linkProtocols";
+import { normalizeHidden } from "./render";
 import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
@@ -109,7 +110,7 @@ export function normalizeEditorBlock(value: unknown, index: number): BlockBuilde
   return {
     id: typeof record.id === "string" && record.id ? record.id : `block-${index + 1}`,
     type: typeof record.type === "string" && record.type ? record.type : "text",
-    hidden: typeof record.hidden === "boolean" ? record.hidden : undefined,
+    hidden: normalizeHidden(record.hidden),
     props,
   };
 }

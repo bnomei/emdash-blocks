@@ -4,6 +4,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+// Coerce a stored `hidden` flag to a boolean. Migrated JSON often carries string
+// sentinels ("true"/"false"/"yes"/"1"/...); keeping only real booleans dropped
+// those to undefined, silently rendering hidden blocks as visible (and a raw
+// `!block.hidden` check treats the truthy string "false" as hidden).
+export function normalizeHidden(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "") return undefined;
+    return (
+      normalized !== "false" &&
+      normalized !== "0" &&
+      normalized !== "no" &&
+      normalized !== "off"
+    );
+  }
+  return undefined;
+}
+
 export function isBlockBuilderBlock(value: unknown): value is BlockBuilderBlock {
   return (
     isRecord(value) &&
@@ -19,7 +38,7 @@ export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilde
   return {
     id: typeof record.id === "string" && record.id ? record.id : `block-${index + 1}`,
     type: typeof record.type === "string" && record.type ? record.type : "text",
-    hidden: typeof record.hidden === "boolean" ? record.hidden : undefined,
+    hidden: normalizeHidden(record.hidden),
     props,
   };
 }

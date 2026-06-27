@@ -140,6 +140,17 @@ test("normalizeEditorBlocks preserves a single stored block object", () => {
     [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
   );
 
+  // String hidden sentinels coerce to booleans (migration data) rather than
+  // dropping to undefined and rendering hidden blocks as visible.
+  assert.equal(
+    normalizeEditorBlocks([{ id: "x", type: "text", hidden: "true", props: {} }])[0].hidden,
+    true,
+  );
+  assert.equal(
+    normalizeEditorBlocks([{ id: "y", type: "text", hidden: "false", props: {} }])[0].hidden,
+    false,
+  );
+
   // Duplicate ids are made unique so they never collide as React list keys.
   const deduped = normalizeEditorBlocks([
     { id: "dup", type: "text", props: { text: "A" } },

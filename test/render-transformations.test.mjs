@@ -24,10 +24,17 @@ test("normalizes malformed blocks with stable fallback values", () => {
     {
       id: "block-3",
       type: "text",
-      hidden: undefined,
+      hidden: true,
       props: {},
     },
   );
+
+  // String hidden sentinels coerce to booleans instead of dropping to undefined.
+  assert.equal(normalizeBlock({ id: "a", type: "text", hidden: "true", props: {} }).hidden, true);
+  assert.equal(normalizeBlock({ id: "b", type: "text", hidden: "false", props: {} }).hidden, false);
+  assert.equal(normalizeBlock({ id: "c", type: "text", hidden: "0", props: {} }).hidden, false);
+  assert.equal(normalizeBlock({ id: "d", type: "text", hidden: "1", props: {} }).hidden, true);
+  assert.equal(normalizeBlock({ id: "e", type: "text", props: {} }).hidden, undefined);
 
   assert.deepEqual(normalizeBlocks(null), []);
   assert.deepEqual(normalizeBlocks(undefined), []);
