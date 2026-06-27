@@ -25,7 +25,9 @@ export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilde
 }
 
 export function normalizeBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
-  return (blocks ?? []).map((block, index) => normalizeBlock(block, index));
+  return Array.isArray(blocks)
+    ? blocks.map((block, index) => normalizeBlock(block, index))
+    : [];
 }
 
 export function visibleBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {

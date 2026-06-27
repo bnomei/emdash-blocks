@@ -31,6 +31,11 @@ test("normalizes malformed blocks with stable fallback values", () => {
 
   assert.deepEqual(normalizeBlocks(null), []);
   assert.deepEqual(normalizeBlocks(undefined), []);
+
+  // Non-array truthy stored JSON must degrade to an empty list, not throw.
+  assert.deepEqual(normalizeBlocks({ id: "hero-1", type: "heading", props: {} }), []);
+  assert.deepEqual(normalizeBlocks("not-an-array"), []);
+  assert.deepEqual(visibleBlocks({ id: "hero-1", type: "heading", props: {} }), []);
 });
 
 test("preserves valid block data and filters only hidden blocks", () => {
