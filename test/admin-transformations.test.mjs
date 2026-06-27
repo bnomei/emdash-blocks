@@ -139,6 +139,18 @@ test("normalizeEditorBlocks preserves a single stored block object", () => {
     normalizeEditorBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
     [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
   );
+
+  // Duplicate ids are made unique so they never collide as React list keys.
+  const deduped = normalizeEditorBlocks([
+    { id: "dup", type: "text", props: { text: "A" } },
+    { id: "dup", type: "text", props: { text: "B" } },
+    { id: "dup", type: "text", props: { text: "C" } },
+  ]);
+  const ids = deduped.map((block) => block.id);
+  assert.equal(ids[0], "dup");
+  assert.equal(new Set(ids).size, 3, "all ids unique");
+  // Block content/order is preserved; only colliding ids change.
+  assert.equal(deduped[1].props.text, "B");
 });
 
 test("normalizes media values from stored values and API items", () => {
