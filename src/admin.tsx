@@ -439,21 +439,39 @@ function PortableTextPropField({
   const valueKey = JSON.stringify(value ?? null);
   const editorRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState(() => portableTextToEditorHtml(value));
+  // Set when an external `value` update arrives while the editor is focused and
+  // the user has not yet re-edited. Blur then resyncs to the external value
+  // instead of committing pre-update DOM over it.
+  const externalUpdateWhileFocusedRef = useRef(false);
 
   useEffect(() => {
     const nextHtml = portableTextToEditorHtml(value);
     setHtml(nextHtml);
     if (editorRef.current && globalThis.document?.activeElement !== editorRef.current) {
       editorRef.current.innerHTML = nextHtml;
+    } else if (editorRef.current) {
+      externalUpdateWhileFocusedRef.current = true;
     }
   }, [valueKey]);
 
   function commit() {
+    if (externalUpdateWhileFocusedRef.current) {
+      // A newer external value arrived during this edit session and the user
+      // did not edit further; resync the DOM to it rather than overwriting it.
+      externalUpdateWhileFocusedRef.current = false;
+      const syncedHtml = portableTextToEditorHtml(value);
+      setHtml(syncedHtml);
+      if (editorRef.current) editorRef.current.innerHTML = syncedHtml;
+      return;
+    }
     const nextValue = editorHtmlToPortableText(editorRef.current);
     onChange(nextValue);
   }
 
   function runCommand(command: string, commandValue?: string) {
+    // Toolbar actions are deliberate edits, so the editor content is now
+    // authoritative again.
+    externalUpdateWhileFocusedRef.current = false;
     editorCommandAdapter.dispatchCommand(editorRef.current, command, commandValue);
     setHtml(editorRef.current?.innerHTML ?? "");
     commit();
@@ -544,7 +562,13 @@ function PortableTextPropField({
           suppressContentEditableWarning
           style={writerSurfaceStyle}
           data-empty={!html.trim() ? "true" : undefined}
-          onInput={() => setHtml(editorRef.current?.innerHTML ?? "")}
+          onFocus={() => {
+            externalUpdateWhileFocusedRef.current = false;
+          }}
+          onInput={() => {
+            externalUpdateWhileFocusedRef.current = false;
+            setHtml(editorRef.current?.innerHTML ?? "");
+          }}
           onBlur={commit}
           dangerouslySetInnerHTML={{ __html: html }}
         />
