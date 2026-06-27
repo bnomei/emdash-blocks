@@ -835,8 +835,13 @@ function JsonLikePropField({
     value === undefined ? "" : JSON.stringify(value, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
+  const focusedRef = useRef(false);
 
   useEffect(() => {
+    // Don't clobber an in-progress draft while the user is editing; resync the
+    // controlled textarea only when it is not focused (mirrors the
+    // portable-text focus guard). The draft commits on blur.
+    if (focusedRef.current) return;
     setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
     setParseError(null);
   }, [valueKey]);
@@ -868,11 +873,17 @@ function JsonLikePropField({
         className="min-h-24 w-full font-mono text-sm"
         placeholder={localizedString(field.placeholder, i18n) || undefined}
         value={draft}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
           setDraft(event.currentTarget.value);
           if (parseError) commit(event.currentTarget.value);
         }}
-        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => commit(event.currentTarget.value)}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          focusedRef.current = false;
+          commit(event.currentTarget.value);
+        }}
       />
       {parseError ? (
         <small id={`${id}-json-error`} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
