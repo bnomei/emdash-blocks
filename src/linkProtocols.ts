@@ -43,11 +43,27 @@ function stripInvisibleCharacters(value: string): string {
   return value.replace(/[\p{Cc}\p{Cf}\p{Zs}\s]/gu, "");
 }
 
+// Decode percent-encoded octets so an encoded scheme separator (e.g. "%3A" for
+// ":") cannot hide a disallowed scheme from the start-anchored detector. Only
+// the decoded form is used for validation; the original href is what is stored.
+function decodePercentEncoding(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Decode only well-formed ASCII octets so a stray "%" doesn't abort.
+    return value.replace(/%[0-9a-fA-F]{2}/g, (octet) =>
+      String.fromCharCode(Number.parseInt(octet.slice(1), 16)),
+    );
+  }
+}
+
 export function isSafeLinkHref(value: string): boolean {
   const href = value.trim();
   if (!href) return false;
 
-  const normalizedHref = stripInvisibleCharacters(decodeHtmlEntities(href));
+  const normalizedHref = stripInvisibleCharacters(
+    decodePercentEncoding(decodeHtmlEntities(href)),
+  );
   if (!normalizedHref) return false;
 
   const slashNormalizedHref = normalizedHref.replace(/\\/g, "/");

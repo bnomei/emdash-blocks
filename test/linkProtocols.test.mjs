@@ -34,6 +34,10 @@ const rejected = [
   "\x00//evil.test",
   "​//evil.test",
   "&sol;&sol;evil.test",
+  "javascript%3Aalert(1)",
+  "javascript%3aalert(1)",
+  "java‍script:alert(1)",
+  "%2F%2Fevil.com",
 ];
 
 test("allows safe protocols and relative links", () => {
