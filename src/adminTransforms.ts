@@ -115,7 +115,21 @@ export function normalizeEditorBlock(value: unknown, index: number): BlockBuilde
 }
 
 export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
-  return Array.isArray(value) ? value.map((item, index) => normalizeEditorBlock(item, index)) : [];
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeEditorBlock(item, index));
+  }
+  // A single stored block object (a plausible migration/corruption shape) is
+  // coerced into a one-element list so its content is shown and preserved,
+  // rather than presented as empty and silently overwritten on the first edit.
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).type === "string" &&
+    (value as Record<string, unknown>).type
+  ) {
+    return [normalizeEditorBlock(value, 0)];
+  }
+  return [];
 }
 
 export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuilderValue {

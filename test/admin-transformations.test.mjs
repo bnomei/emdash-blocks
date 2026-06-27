@@ -9,6 +9,7 @@ import {
   mediaUrl,
   mediaValueFromItem,
   mediaValues,
+  normalizeEditorBlocks,
   parseProps,
   portableTextBlocks,
   portableTextToEditorHtml,
@@ -115,6 +116,23 @@ test("normalizes editor block defaults and submission visibility", () => {
       { id: "hidden", type: "custom", hidden: true, props: {} },
     ],
   );
+});
+
+test("normalizeEditorBlocks preserves a single stored block object", () => {
+  // Arrays normalize element-by-element.
+  assert.deepEqual(normalizeEditorBlocks([{ id: "a", type: "heading", props: {} }]), [
+    { id: "a", type: "heading", hidden: undefined, props: {} },
+  ]);
+  // A single block object (migration/corruption shape) is coerced into a
+  // one-element list instead of being shown as empty and overwritten.
+  assert.deepEqual(
+    normalizeEditorBlocks({ id: "hero-1", type: "heading", props: { text: "Hello", level: "h2" } }),
+    [{ id: "hero-1", type: "heading", hidden: undefined, props: { text: "Hello", level: "h2" } }],
+  );
+  // Non-block values still degrade to an empty list.
+  assert.deepEqual(normalizeEditorBlocks({ foo: "bar" }), []);
+  assert.deepEqual(normalizeEditorBlocks(null), []);
+  assert.deepEqual(normalizeEditorBlocks("nope"), []);
 });
 
 test("normalizes media values from stored values and API items", () => {
