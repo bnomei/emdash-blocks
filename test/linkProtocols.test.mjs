@@ -25,6 +25,12 @@ const rejected = [
   "\\\\example.com/protocol-relative-backslash",
   "/\\example.com/protocol-relative-mixed",
   "vbscript:msgbox(1)",
+  "&#106;avascript:alert(1)",
+  "&#x6a;avascript:alert(1)",
+  "javascript&colon;alert(1)",
+  "​javascript:alert(1)",
+  "﻿javascript:alert(1)",
+  "&#106;&#x73;cript:alert(1)",
 ];
 
 test("allows safe protocols and relative links", () => {

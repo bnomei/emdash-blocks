@@ -1,22 +1,59 @@
 const allowedLinkProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
 
-function compactSchemeCandidate(value: string): string {
-  return Array.from(value)
-    .filter((character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
-      return codePoint > 0x20 && codePoint !== 0x7f;
-    })
-    .join("");
+// Named HTML entities that decode to characters relevant to URL scheme/path
+// obfuscation. Decoding these mirrors how a browser interprets an href
+// attribute value before navigation, so they cannot be used to smuggle a
+// disallowed scheme past validation.
+const namedSchemeEntities: Record<string, string> = {
+  colon: ":",
+  tab: "\t",
+  newline: "\n",
+  sol: "/",
+  bsol: "\\",
+};
+
+// Decode numeric, hex, and a small set of named HTML entities. Only the
+// decoded form is used for validation; the original href is what gets stored.
+function decodeHtmlEntities(value: string): string {
+  return value.replace(
+    /&(#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);?/g,
+    (match, body: string) => {
+      if (body[0] === "#") {
+        const isHex = body[1] === "x" || body[1] === "X";
+        const codePoint = Number.parseInt(body.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+        if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+          return match;
+        }
+        try {
+          return String.fromCodePoint(codePoint);
+        } catch {
+          return match;
+        }
+      }
+      const named = namedSchemeEntities[body.toLowerCase()];
+      return named ?? match;
+    },
+  );
+}
+
+// Remove control characters, Unicode format/zero-width characters, and
+// whitespace so that obfuscated schemes (e.g. a leading U+200B) cannot block
+// the start-anchored scheme detector.
+function stripInvisibleCharacters(value: string): string {
+  return value.replace(/[\p{Cc}\p{Cf}\p{Zs}\s]/gu, "");
 }
 
 export function isSafeLinkHref(value: string): boolean {
   const href = value.trim();
   if (!href) return false;
-  const slashNormalizedHref = href.replace(/\\/g, "/");
+
+  const normalizedHref = stripInvisibleCharacters(decodeHtmlEntities(href));
+  if (!normalizedHref) return false;
+
+  const slashNormalizedHref = normalizedHref.replace(/\\/g, "/");
   if (slashNormalizedHref.startsWith("//")) return false;
 
-  const compactHref = compactSchemeCandidate(href);
-  const scheme = compactHref.match(/^[a-zA-Z][a-zA-Z\d+.-]*:/)?.[0].toLowerCase();
+  const scheme = normalizedHref.match(/^[a-zA-Z][a-zA-Z\d+.-]*:/)?.[0].toLowerCase();
   if (scheme) return allowedLinkProtocols.has(scheme);
 
   return true;
