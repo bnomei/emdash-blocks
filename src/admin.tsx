@@ -31,7 +31,6 @@ import {
   mediaValues,
   normalizeEditorBlocks,
   parseJsonDraft,
-  parseProps,
   portableTextToEditorHtml,
   prepareBlocksForChange,
   randomId,
@@ -918,10 +917,33 @@ function RawPropsField({
   // showing the previous JSON and could restore it on a no-edit blur.
   const valueKey = JSON.stringify(props ?? {});
   const [draft, setDraft] = useState(() => JSON.stringify(props ?? {}, null, 2));
+  const [parseError, setParseError] = useState<string | null>(null);
+  const errorId = `${idPrefix}-props-error`;
 
   useEffect(() => {
     setDraft(JSON.stringify(props ?? {}, null, 2));
+    setParseError(null);
   }, [valueKey]);
+
+  function commit(nextDraft: string) {
+    const result = parseJsonDraft(nextDraft);
+    if (!result.ok) {
+      setParseError(formatBlockMessage("invalidJson", i18n, { error: result.error }));
+      return;
+    }
+    if (result.value === undefined) {
+      // Clearing the textarea resets props to an empty object.
+      setParseError(null);
+      onChange({});
+      return;
+    }
+    if (typeof result.value !== "object" || Array.isArray(result.value)) {
+      setParseError(blockMessage("propsMustBeObject", i18n));
+      return;
+    }
+    setParseError(null);
+    onChange(result.value as BlockBuilderProps);
+  }
 
   return (
     <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
@@ -929,14 +951,21 @@ function RawPropsField({
       <Textarea
         id={`${idPrefix}-props`}
         aria-label={blockMessage("blockProps", i18n)}
+        aria-invalid={parseError ? true : undefined}
+        aria-describedby={parseError ? errorId : undefined}
         className="min-h-28 w-full font-mono text-sm"
         value={draft}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.currentTarget.value)}
-        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
-          const nextProps = parseProps(event.currentTarget.value);
-          if (nextProps) onChange(nextProps);
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          setDraft(event.currentTarget.value);
+          if (parseError) commit(event.currentTarget.value);
         }}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => commit(event.currentTarget.value)}
       />
+      {parseError ? (
+        <small id={errorId} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
+          {parseError}
+        </small>
+      ) : null}
     </label>
   );
 }

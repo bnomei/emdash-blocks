@@ -24,6 +24,7 @@ export type BlocksMessageKey =
   | "numberedList"
   | "paragraph"
   | "props"
+  | "propsMustBeObject"
   | "quote"
   | "remove"
   | "removeBlock"
@@ -73,6 +74,7 @@ export const DEFAULT_BLOCKS_I18N = {
       numberedList: "Numbered list",
       paragraph: "Paragraph",
       props: "Props",
+      propsMustBeObject: "Props must be a JSON object.",
       quote: "Quote",
       remove: "Remove",
       removeBlock: "Remove block",
