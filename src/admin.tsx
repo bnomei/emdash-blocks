@@ -342,6 +342,8 @@ function NumberPropField({
   );
 }
 
+const MEDIA_LIBRARY_FETCH_LIMIT = 100;
+
 function MediaPropField({
   field,
   value,
@@ -359,6 +361,7 @@ function MediaPropField({
 }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [truncated, setTruncated] = useState(false);
   const selected = multiple ? mediaValues(value) : mediaValues(firstMediaValue(value));
   const selectedKeys = useMemo(() => new Set(selected.map(mediaIdentity)), [selected]);
   const allItems = useMemo(() => {
@@ -386,7 +389,7 @@ function MediaPropField({
       setStatus("loading");
       try {
         const url = new URL("/_emdash/api/media", globalThis.location.origin);
-        url.searchParams.set("limit", "100");
+        url.searchParams.set("limit", String(MEDIA_LIBRARY_FETCH_LIMIT));
         url.searchParams.set("mimeType", "image/");
         const response = await fetch(url, {
           credentials: "same-origin",
@@ -394,7 +397,11 @@ function MediaPropField({
         });
         if (!response.ok) throw new Error(`Media request failed: ${response.status}`);
         const body = (await response.json()) as { data?: { items?: MediaItem[] } };
-        setItems(body.data?.items ?? []);
+        const fetchedItems = body.data?.items ?? [];
+        setItems(fetchedItems);
+        // A full page likely means the library has more assets than were
+        // returned, so surface that the picker list is truncated.
+        setTruncated(fetchedItems.length >= MEDIA_LIBRARY_FETCH_LIMIT);
         setStatus("idle");
       } catch {
         if (!controller.signal.aborted) {
@@ -493,6 +500,11 @@ function MediaPropField({
       ) : null}
       {status === "error" ? (
         <small style={helpTextStyle}>{blockMessage("couldNotLoadMedia", i18n)}</small>
+      ) : null}
+      {truncated ? (
+        <small style={helpTextStyle}>
+          {formatBlockMessage("mediaLibraryTruncated", i18n, { count: MEDIA_LIBRARY_FETCH_LIMIT })}
+        </small>
       ) : null}
       {field.helpText ? (
         <small style={helpTextStyle}>{localizedString(field.helpText, i18n)}</small>

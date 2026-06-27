@@ -17,6 +17,7 @@ export type BlocksMessageKey =
   | "link"
   | "linkProtocolError"
   | "loadingMedia"
+  | "mediaLibraryTruncated"
   | "moveBlockDown"
   | "moveBlockUp"
   | "noEditableProps"
@@ -68,6 +69,7 @@ export const DEFAULT_BLOCKS_I18N = {
       linkProtocolError:
         "Links must use http:, https:, mailto:, tel:, root-relative, or relative URLs.",
       loadingMedia: "Loading media...",
+      mediaLibraryTruncated: "Only the first {count} media items are shown.",
       moveBlockDown: "Move block down",
       moveBlockUp: "Move block up",
       noEditableProps: "This block type has no editable props.",
