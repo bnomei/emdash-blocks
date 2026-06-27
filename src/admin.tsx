@@ -919,6 +919,13 @@ function JsonLikePropField({
         return;
       }
     }
+    if (field.type === "json" && result.value === undefined) {
+      // Clearing a json field persists an empty object rather than dropping the
+      // prop to undefined and losing its object shape.
+      setParseError(null);
+      onChange({});
+      return;
+    }
     setParseError(null);
     onChange(result.value);
   }
