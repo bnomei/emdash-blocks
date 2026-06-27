@@ -28,6 +28,22 @@ test("block messages follow the EmDash-style fallback chain", () => {
   assert.equal(localizedString({ en: "Title", fr: "Titre" }, i18n), "Titre");
 });
 
+test("block message override on a later fallback locale is not shadowed by the en default", () => {
+  // Chain routes through "en" (which has no override) before "brand" (which
+  // does). The built-in English default must not short-circuit the lookup.
+  const i18n = {
+    locale: "en",
+    defaultLocale: "en",
+    fallback: { en: "brand" },
+    messages: { brand: { addBlock: "Block hinzufügen" } },
+  };
+
+  assert.deepEqual(localeFallbacks(i18n), ["en", "brand"]);
+  assert.equal(blockMessage("addBlock", i18n), "Block hinzufügen");
+  // A key with no override anywhere still resolves to the built-in default.
+  assert.equal(blockMessage("removeBlock", i18n), "Remove block");
+});
+
 test("blocks field renders localized schema and editor chrome", () => {
   const html = renderToStaticMarkup(
     React.createElement(BlocksField, {

@@ -143,12 +143,13 @@ export function blockMessage(
 ): string {
   const config = typeof i18n === "string" ? { locale: i18n } : (i18n ?? {});
 
+  // Consult the entire fallback chain for a configured override before falling
+  // back to the built-in English default. Returning the built-in default at the
+  // DEFAULT_LOCALE position mid-loop would shadow an override on a later
+  // fallback-chain locale (mirrors localizedString's resolution order).
   for (const locale of localeFallbacks(config)) {
     const override = config.messages?.[locale]?.[key];
     if (typeof override === "string" && override.length > 0) return override;
-
-    const defaultMessage = DEFAULT_BLOCKS_I18N.messages.en[key];
-    if (locale === DEFAULT_LOCALE && defaultMessage) return defaultMessage;
   }
 
   const sourceOverride = config.messages?.[DEFAULT_LOCALE]?.[key];
