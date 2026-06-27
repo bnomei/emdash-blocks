@@ -87,3 +87,28 @@ test("blocks field renders localized schema and editor chrome", () => {
   assert.match(html, /Block entfernen/);
   assert.doesNotMatch(html, /\[object Object\]/);
 });
+
+test("core image/file types render the media picker, not a text input", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(BlocksField, {
+      value: [{ id: "block-img", type: "gallery", props: {} }],
+      onChange() {},
+      options: {
+        blockDefinitions: [
+          {
+            type: "gallery",
+            label: "Gallery",
+            props: [
+              { key: "photo", label: "Photo", type: "image" },
+              { key: "attachment", label: "Attachment", type: "file" },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  // MediaPropField renders the single-select picker with the "No media" option.
+  const noMediaCount = (html.match(/No media/g) ?? []).length;
+  assert.equal(noMediaCount, 2, "both image and file fields render a media picker");
+});

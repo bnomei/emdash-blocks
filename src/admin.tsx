@@ -815,13 +815,19 @@ function renderPropField(
     );
   }
 
-  if (type === "json" || type === "repeater") {
+  if (type === "json" || type === "repeater" || type === "reference") {
+    // `reference` is a structured value (id/object), not free text, so edit it
+    // through the JSON editor rather than letting it fall through to a plain
+    // text input that would persist a raw string.
     const fallback =
       type === "repeater" ? blockMessage("jsonStringArray", i18n) : blockMessage("jsonValue", i18n);
     return renderJsonLikePropField(field, value, onChange, id, fallback, i18n);
   }
 
-  if (type === "media" || type === "media-list") {
+  // The exported core types `image`/`file` denote media objects; route them to
+  // the media picker alongside the bundled `media` alias so they store a media
+  // object instead of a raw string typed into a text box.
+  if (type === "media" || type === "media-list" || type === "image" || type === "file") {
     return (
       <MediaPropField
         key={field.key}
