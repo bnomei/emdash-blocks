@@ -545,6 +545,14 @@ function PortableTextPropField({
   }
 
   function createLink() {
+    // window.prompt blurs the editor and clears the selection, so capture the
+    // active range before prompting and restore it before execCommand runs;
+    // otherwise createLink applies to no selection and the highlighted text is
+    // not linked.
+    const selection = globalThis.getSelection?.();
+    const savedRange =
+      selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+
     const href = editorCommandAdapter.requestLinkHref();
     if (!href) return;
     const safeHref = safeLinkHref(href);
@@ -552,6 +560,14 @@ function PortableTextPropField({
       globalThis.alert?.(blockMessage("linkProtocolError", i18n));
       return;
     }
+
+    if (savedRange) {
+      editorRef.current?.focus();
+      const restored = globalThis.getSelection?.();
+      restored?.removeAllRanges();
+      restored?.addRange(savedRange);
+    }
+
     runCommand("createLink", safeHref);
   }
 
