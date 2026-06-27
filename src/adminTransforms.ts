@@ -410,7 +410,12 @@ function parseInlineMarkdown(text: string): {
 } {
   const children: PortableTextSpan[] = [];
   const markDefs: PortableTextMarkDef[] = [];
-  const pattern = /(\*\*(.+?)\*\*)|(_(.+?)_)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(~~(.+?)~~)/g;
+  // The `_` emphasis alternative requires alphanumeric word boundaries (per
+  // CommonMark's intraword rule) so `foo_bar_baz`, snake_case, and filenames are
+  // not parsed as emphasis — which would otherwise delete the underscores. The
+  // zero-width lookbehind/lookahead keep group numbering and match[0] intact.
+  const pattern =
+    /(\*\*(.+?)\*\*)|((?<![A-Za-z0-9])_(.+?)_(?![A-Za-z0-9]))|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(~~(.+?)~~)/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
 

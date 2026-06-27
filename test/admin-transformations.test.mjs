@@ -278,6 +278,20 @@ Intro **bold** _em_ \`code\` [safe](/safe) [bad](javascript:alert) ~~old~~
   assert.equal(blocks[5].style, "blockquote");
 });
 
+test("intraword underscores are preserved (not parsed as emphasis)", () => {
+  const [block] = portableTextBlocks("foo_bar_baz and my_file_name");
+  assert.equal(textOf(block), "foo_bar_baz and my_file_name");
+  // No emphasis spans were created from the intraword underscores.
+  for (const span of block.children) {
+    assert.deepEqual(span.marks ?? [], []);
+  }
+
+  // Genuine word-boundary emphasis still works.
+  const [emphasized] = portableTextBlocks("an _italic_ word");
+  assert.deepEqual(spanWithText(emphasized, "italic").marks, ["em"]);
+  assert.equal(textOf(emphasized), "an italic word");
+});
+
 test("renders portable text as escaped editor HTML with sanitized links and lists", () => {
   const html = portableTextToEditorHtml([
     {
