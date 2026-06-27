@@ -31,6 +31,9 @@ const rejected = [
   "​javascript:alert(1)",
   "﻿javascript:alert(1)",
   "&#106;&#x73;cript:alert(1)",
+  "\x00//evil.test",
+  "​//evil.test",
+  "&sol;&sol;evil.test",
 ];
 
 test("allows safe protocols and relative links", () => {
