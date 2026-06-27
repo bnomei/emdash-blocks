@@ -269,8 +269,11 @@ function inputType(field: BlockBuilderPropField) {
 }
 
 function normalizeNumber(value: string, integer: boolean) {
-  if (value === "") return undefined;
-  const number = integer ? Number.parseInt(value, 10) : Number(value);
+  const trimmed = value.trim();
+  // Whitespace-only input is not a numeric token; treat it like empty so it
+  // clears (undefined) instead of Number("   ") coercing to 0.
+  if (trimmed === "") return undefined;
+  const number = integer ? Number.parseInt(trimmed, 10) : Number(trimmed);
   return Number.isFinite(number) ? number : undefined;
 }
 
@@ -331,7 +334,7 @@ function NumberPropField({
           const parsed = normalizeNumber(next, integer);
           // Commit cleared input (undefined) or a complete finite number; keep
           // intermediate prefixes ("-", "1.") in the draft without committing.
-          if (next === "" || parsed !== undefined) onChange(parsed);
+          if (next.trim() === "" || parsed !== undefined) onChange(parsed);
         }}
       />
       {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
