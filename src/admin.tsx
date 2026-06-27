@@ -845,7 +845,13 @@ function JsonLikePropField({
     const result = parseJsonDraft(nextDraft);
     if (result.ok) {
       setParseError(null);
-      onChange(result.value);
+      // Repeater props are array-shaped; clearing the field (parsed as
+      // undefined) must persist [] rather than dropping the array type.
+      onChange(
+        field.type === "repeater" && (result.value === undefined || result.value === null)
+          ? []
+          : result.value,
+      );
     } else {
       setParseError(result.error);
     }
