@@ -4,6 +4,7 @@ import {
   blockWithType,
   createBlockForDefinition,
   editorHtmlToPortableText,
+  isBlockBuilderProps,
   mediaIdentity,
   mediaSelectLabel,
   mediaUrl,
@@ -11,6 +12,7 @@ import {
   mediaValues,
   normalizeEditorBlocks,
   parseProps,
+  parsePropsDraft,
   portableTextBlocks,
   portableTextToEditorHtml,
   prepareBlocksForChange,
@@ -72,6 +74,18 @@ test("parses JSON props only when the draft is an object record", () => {
   assert.equal(parseProps("null"), null);
   assert.equal(parseProps('{"title":'), null);
   assert.equal(parseProps(""), null);
+  assert.equal(isBlockBuilderProps(null), false);
+  assert.equal(isBlockBuilderProps(["not", "props"]), false);
+  assert.equal(isBlockBuilderProps({ title: "Hello" }), true);
+  assert.deepEqual(parsePropsDraft('{"title":"Hello"}'), {
+    ok: true,
+    value: { title: "Hello" },
+  });
+  assert.deepEqual(parsePropsDraft(""), { ok: true, value: {} });
+  assert.deepEqual(parsePropsDraft("null"), { ok: false, error: "propsMustBeObject" });
+  assert.deepEqual(parsePropsDraft("[]"), { ok: false, error: "propsMustBeObject" });
+  assert.equal(parsePropsDraft('{"title":').ok, false);
+  assert.equal(parsePropsDraft('{"title":').error, "invalidJson");
 });
 
 test("normalizes editor block defaults and submission visibility", () => {

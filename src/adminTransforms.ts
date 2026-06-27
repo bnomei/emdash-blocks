@@ -64,6 +64,10 @@ export type PortableTextBlock = {
 };
 
 export type JsonDraftParseResult = { ok: true; value: unknown } | { ok: false; error: string };
+export type PropsDraftParseResult =
+  | { ok: true; value: BlockBuilderProps }
+  | { ok: false; error: "invalidJson"; detail: string }
+  | { ok: false; error: "propsMustBeObject" };
 
 const TEXT_NODE = 3;
 
@@ -100,12 +104,13 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export function isBlockBuilderProps(value: unknown): value is BlockBuilderProps {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export function normalizeEditorBlock(value: unknown, index: number): BlockBuilderBlock {
   const record = asRecord(value);
-  const props =
-    record.props && typeof record.props === "object" && !Array.isArray(record.props)
-      ? (record.props as Record<string, unknown>)
-      : {};
+  const props = isBlockBuilderProps(record.props) ? record.props : {};
 
   return {
     id: typeof record.id === "string" && record.id ? record.id : `block-${index + 1}`,
@@ -245,9 +250,15 @@ function parseJsonValue(value: string): unknown {
 
 export function parseProps(value: string): BlockBuilderProps | null {
   const parsed = parseJsonValue(value);
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as BlockBuilderProps)
-    : null;
+  return isBlockBuilderProps(parsed) ? parsed : null;
+}
+
+export function parsePropsDraft(value: string): PropsDraftParseResult {
+  const result = parseJsonDraft(value);
+  if (!result.ok) return { ok: false, error: "invalidJson", detail: result.error };
+  if (result.value === undefined) return { ok: true, value: {} };
+  if (!isBlockBuilderProps(result.value)) return { ok: false, error: "propsMustBeObject" };
+  return { ok: true, value: result.value };
 }
 
 export function isMediaValue(value: unknown): value is MediaValue {

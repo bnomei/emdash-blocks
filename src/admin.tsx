@@ -31,6 +31,7 @@ import {
   mediaValues,
   normalizeEditorBlocks,
   parseJsonDraft,
+  parsePropsDraft,
   portableTextToEditorHtml,
   prepareBlocksForChange,
   randomId,
@@ -1017,23 +1018,17 @@ function RawPropsField({
   }, [valueKey]);
 
   function commit(nextDraft: string) {
-    const result = parseJsonDraft(nextDraft);
+    const result = parsePropsDraft(nextDraft);
     if (!result.ok) {
-      setParseError(formatBlockMessage("invalidJson", i18n, { error: result.error }));
-      return;
-    }
-    if (result.value === undefined) {
-      // Clearing the textarea resets props to an empty object.
-      setParseError(null);
-      onChange({});
-      return;
-    }
-    if (typeof result.value !== "object" || Array.isArray(result.value)) {
-      setParseError(blockMessage("propsMustBeObject", i18n));
+      setParseError(
+        result.error === "invalidJson"
+          ? formatBlockMessage("invalidJson", i18n, { error: result.detail })
+          : blockMessage("propsMustBeObject", i18n),
+      );
       return;
     }
     setParseError(null);
-    onChange(result.value as BlockBuilderProps);
+    onChange(result.value);
   }
 
   return (
