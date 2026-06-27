@@ -157,8 +157,22 @@ export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
   return [];
 }
 
+// Matches the display-only ids normalizeEditorBlock synthesizes for imported
+// id-less blocks ("block-1", "block-2", ...). Created blocks use randomId
+// (a UUID or "block-<base36>-<rand>"), which never matches this exact shape.
+const SYNTHETIC_BLOCK_ID = /^block-\d+$/;
+
 export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuilderValue {
-  return nextBlocks.map((block) => ({ ...block, hidden: block.hidden || undefined }));
+  return nextBlocks.map((block) => {
+    const prepared: BlockBuilderBlock = { ...block, hidden: block.hidden || undefined };
+    // Don't persist a synthetic index-based id into stored JSON; keep imported
+    // id-less content id-less rather than mutating its identity on the first
+    // unrelated edit. The id is re-synthesized for display/keys on next read.
+    if (SYNTHETIC_BLOCK_ID.test(prepared.id)) {
+      delete (prepared as { id?: string }).id;
+    }
+    return prepared;
+  });
 }
 
 export function resolveBlockDefinitions(

@@ -116,6 +116,22 @@ test("normalizes editor block defaults and submission visibility", () => {
       { id: "hidden", type: "custom", hidden: true, props: {} },
     ],
   );
+
+  // Synthetic index-based ids (block-N) are not persisted; explicit ids stay.
+  const prepared = prepareBlocksForChange([
+    { id: "block-1", type: "text", props: { text: "Hello" } },
+    { id: "kept-id", type: "text", props: {} },
+  ]);
+  assert.equal("id" in prepared[0], false);
+  assert.deepEqual(prepared[0], { type: "text", hidden: undefined, props: { text: "Hello" } });
+  assert.equal(prepared[1].id, "kept-id");
+
+  // An imported id-less block does not gain a synthetic id after a round-trip
+  // through normalize → prepare.
+  const roundTripped = prepareBlocksForChange(
+    normalizeEditorBlocks([{ type: "text", props: { text: "Imported" } }]),
+  );
+  assert.equal("id" in roundTripped[0], false);
 });
 
 test("normalizeEditorBlocks preserves a single stored block object", () => {
