@@ -404,7 +404,18 @@ function MediaPropField({
     }
 
     void loadMedia();
-    return () => controller.abort();
+
+    // Refetch when the window regains focus so assets uploaded elsewhere in the
+    // session become selectable without remounting the field.
+    function handleFocus() {
+      void loadMedia();
+    }
+    globalThis.addEventListener?.("focus", handleFocus);
+
+    return () => {
+      controller.abort();
+      globalThis.removeEventListener?.("focus", handleFocus);
+    };
   }, []);
 
   function selectMedia(identity: string) {
