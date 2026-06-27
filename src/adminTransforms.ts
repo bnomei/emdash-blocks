@@ -510,6 +510,7 @@ export function editorHtmlToPortableText(
 function appendPortableTextNode(
   node: ChildNode | TextNodeLike | ElementLike,
   blocks: PortableTextBlock[],
+  level = 1,
 ) {
   if (isTextNodeLike(node) && node.nodeType === TEXT_NODE) {
     const text = node.textContent ?? "";
@@ -524,13 +525,13 @@ function appendPortableTextNode(
     const listItem = tag === "ol" ? "number" : "bullet";
     node.querySelectorAll(":scope > li").forEach((item) => {
       if (!isElementLike(item)) return;
-      blocks.push(elementToTextBlock(item, "normal", listItem, listItemLevel(item)));
+      appendListItem(item, blocks, listItem, level);
     });
     return;
   }
 
   if (tag === "li") {
-    blocks.push(elementToTextBlock(node, "normal", "bullet", listItemLevel(node)));
+    appendListItem(node, blocks, "bullet", level);
     return;
   }
 
@@ -555,26 +556,59 @@ function appendPortableTextNode(
   node.childNodes.forEach((child) => appendPortableTextNode(child, blocks));
 }
 
-// Restore the nested list level from the data-level attribute emitted by
-// portableTextToEditorHtml, defaulting to 1 for top-level / un-annotated items.
-function listItemLevel(element: ElementLike): number {
+// Restore the nested list level: prefer the data-level attribute emitted by
+// portableTextToEditorHtml, otherwise fall back to the structural nesting depth
+// derived from how deep the <ul>/<ol> ancestry is.
+function listItemLevel(element: ElementLike, fallback: number): number {
   const raw = Number(element.getAttribute("data-level"));
-  return Number.isInteger(raw) && raw > 1 ? raw : 1;
+  return Number.isInteger(raw) && raw > 1 ? raw : fallback;
 }
 
-function elementToTextBlock(
-  element: ElementLike,
-  style = "normal",
-  listItem?: "bullet" | "number",
-  level = 1,
-): PortableTextBlock {
+// Emit one block for a list item from its inline content only, then recurse into
+// any nested <ul>/<ol> so their items become their own blocks (at the next
+// level) instead of being fused into this item's text.
+function appendListItem(
+  item: ElementLike,
+  blocks: PortableTextBlock[],
+  listItem: "bullet" | "number",
+  level: number,
+) {
+  const inlineNodes: Array<ChildNode | TextNodeLike | ElementLike> = [];
+  const nestedLists: ElementLike[] = [];
+  for (const child of Array.from(item.childNodes)) {
+    const childTag = isElementLike(child) ? child.tagName.toLowerCase() : "";
+    if (childTag === "ul" || childTag === "ol") {
+      nestedLists.push(child as ElementLike);
+    } else {
+      inlineNodes.push(child);
+    }
+  }
+
+  const itemLevel = listItemLevel(item, level);
+  const markDefs: PortableTextMarkDef[] = [];
+  const children = inlineNodesToSpans(inlineNodes, [], markDefs);
+  blocks.push({
+    _type: "block",
+    _key: randomId("pt"),
+    style: "normal",
+    listItem,
+    level: itemLevel,
+    markDefs,
+    children: children.length ? children : [makeSpan("")],
+  });
+
+  for (const nested of nestedLists) {
+    appendPortableTextNode(nested, blocks, itemLevel + 1);
+  }
+}
+
+function elementToTextBlock(element: ElementLike, style = "normal"): PortableTextBlock {
   const markDefs: PortableTextMarkDef[] = [];
   const children = inlineNodesToSpans(Array.from(element.childNodes), [], markDefs);
   return {
     _type: "block",
     _key: randomId("pt"),
     style,
-    ...(listItem ? { listItem, level } : {}),
     markDefs,
     children: children.length ? children : [makeSpan("")],
   };

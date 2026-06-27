@@ -373,6 +373,34 @@ test("converts editor HTML nodes to portable text blocks", () => {
   }
 });
 
+test("keeps nested list items as their own blocks instead of fusing into parent", () => {
+  const previousHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement = TestElement;
+
+  try {
+    const blocks = editorHtmlToPortableText(
+      element("div", [
+        element("ul", [
+          element("li", [
+            text("Parent"),
+            element("ul", [element("li", [text("Child")])]),
+          ]),
+        ]),
+      ]),
+    );
+
+    assert.equal(blocks.length, 2);
+    assert.equal(textOf(blocks[0]), "Parent");
+    assert.equal(blocks[0].listItem, "bullet");
+    assert.equal(blocks[0].level, 1);
+    assert.equal(textOf(blocks[1]), "Child");
+    assert.equal(blocks[1].listItem, "bullet");
+    assert.equal(blocks[1].level, 2);
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
+});
+
 test("preserves h5 and h6 heading levels on editor HTML round-trip", () => {
   const previousHTMLElement = globalThis.HTMLElement;
   globalThis.HTMLElement = TestElement;
