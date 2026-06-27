@@ -309,3 +309,22 @@ test("converts editor HTML nodes to portable text blocks", () => {
     globalThis.HTMLElement = previousHTMLElement;
   }
 });
+
+test("preserves h5 and h6 heading levels on editor HTML round-trip", () => {
+  const previousHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement = TestElement;
+
+  try {
+    const blocks = editorHtmlToPortableText(
+      element("div", [
+        element("h5", [text("Five")]),
+        element("h6", [text("Six")]),
+      ]),
+    );
+
+    assert.equal(blocks[0].style, "h5");
+    assert.equal(blocks[1].style, "h6");
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
+});

@@ -514,7 +514,10 @@ function appendPortableTextNode(
   }
 
   if (/^h[1-6]$/.test(tag)) {
-    blocks.push(elementToTextBlock(node, `h${Math.min(Number(tag.slice(1)), 4)}`));
+    // Preserve the full h1-h6 range; the export path (portableTextToEditorHtml)
+    // already emits these faithfully, so capping here downgraded h5/h6 to h4 on
+    // an untouched open/blur round-trip.
+    blocks.push(elementToTextBlock(node, tag));
     return;
   }
 
