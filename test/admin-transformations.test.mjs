@@ -206,6 +206,17 @@ test("normalizes media values from stored values and API items", () => {
     stored,
     { src: "/fallback.jpg" },
   ]);
+
+  // Empty-string id/src yield no usable identity, so they are filtered out
+  // rather than collapsing onto a shared "" dedup/React key.
+  assert.deepEqual(mediaValues([{ id: "" }, { src: "" }]), []);
+  // A non-empty identity from any source keeps the value.
+  assert.deepEqual(mediaValues([{ id: "", src: "https://cdn/x.jpg" }]), [
+    { id: "", src: "https://cdn/x.jpg" },
+  ]);
+  assert.deepEqual(mediaValues([{ id: "", meta: { storageKey: "k" } }]), [
+    { id: "", meta: { storageKey: "k" } },
+  ]);
 });
 
 test("converts markdown source to portable text blocks", () => {

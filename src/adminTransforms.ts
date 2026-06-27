@@ -237,7 +237,13 @@ export function parseProps(value: string): BlockBuilderProps | null {
 
 export function isMediaValue(value: unknown): value is MediaValue {
   const record = asRecord(value);
-  return typeof record.id === "string" || typeof record.src === "string";
+  if (typeof record.id !== "string" && typeof record.src !== "string") return false;
+  // Require a non-empty identity source so a value that survives mediaValues can
+  // always derive a stable, unique key. Empty-string id/src would collapse
+  // distinct entries onto the same dedup/React key and make a single remove
+  // delete every empty-identity entry at once.
+  const identitySources = [record.id, record.src, record.previewUrl, asRecord(record.meta).storageKey];
+  return identitySources.some((candidate) => typeof candidate === "string" && candidate.length > 0);
 }
 
 export function mediaValues(value: unknown): MediaValue[] {
