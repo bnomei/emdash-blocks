@@ -275,6 +275,60 @@ function normalizeNumber(value: string, integer: boolean) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function NumberPropField({
+  field,
+  value,
+  onChange,
+  id,
+  label,
+  helpText,
+  placeholder,
+  integer,
+}: {
+  field: BlockBuilderPropField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  id: string;
+  label: string;
+  helpText: string;
+  placeholder?: string;
+  integer: boolean;
+}) {
+  // Keep a local draft string so intermediate values like "-", "-0" or "1."
+  // are not wiped while typing. The committed value still flows through
+  // normalizeNumber; the draft only resyncs when the external value diverges.
+  const valueKey = typeof value === "number" ? String(value) : "";
+  const [draft, setDraft] = useState(() => valueKey);
+
+  useEffect(() => {
+    setDraft((current) => (normalizeNumber(current, integer) === value ? current : valueKey));
+  }, [valueKey]);
+
+  return (
+    <label key={field.key} htmlFor={id} style={fieldStyle}>
+      <span style={labelStyle}>{label}</span>
+      <Input
+        id={id}
+        aria-label={label}
+        className="w-full"
+        placeholder={placeholder}
+        type="number"
+        step={integer ? 1 : undefined}
+        value={draft}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          const next = event.currentTarget.value;
+          setDraft(next);
+          const parsed = normalizeNumber(next, integer);
+          // Commit cleared input (undefined) or a complete finite number; keep
+          // intermediate prefixes ("-", "1.") in the draft without committing.
+          if (next === "" || parsed !== undefined) onChange(parsed);
+        }}
+      />
+      {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
+    </label>
+  );
+}
+
 function MediaPropField({
   field,
   value,
@@ -729,6 +783,22 @@ function renderPropField(
     );
   }
 
+  if (type === "number" || type === "integer") {
+    return (
+      <NumberPropField
+        key={field.key}
+        field={field}
+        value={value}
+        onChange={onChange}
+        id={id}
+        label={label}
+        helpText={helpText}
+        placeholder={placeholder}
+        integer={type === "integer"}
+      />
+    );
+  }
+
   return (
     <label key={field.key} htmlFor={id} style={fieldStyle}>
       <span style={labelStyle}>{label}</span>
@@ -738,15 +808,8 @@ function renderPropField(
         className="w-full"
         placeholder={placeholder}
         type={inputType(field)}
-        step={type === "integer" ? 1 : undefined}
         value={stringValue}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          if (type === "number" || type === "integer") {
-            onChange(normalizeNumber(event.currentTarget.value, type === "integer"));
-          } else {
-            onChange(event.currentTarget.value);
-          }
-        }}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.currentTarget.value)}
       />
       {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
     </label>
