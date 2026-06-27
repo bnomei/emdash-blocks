@@ -131,7 +131,6 @@ test("normalizes editor block defaults and submission visibility", () => {
     ],
   );
 
-  // Synthetic index-based ids (block-N) are not persisted; explicit ids stay.
   const prepared = prepareBlocksForChange([
     { id: "block-1", type: "text", props: { text: "Hello" } },
     { id: "kept-id", type: "text", props: {} },
@@ -140,8 +139,6 @@ test("normalizes editor block defaults and submission visibility", () => {
   assert.deepEqual(prepared[0], { type: "text", hidden: undefined, props: { text: "Hello" } });
   assert.equal(prepared[1].id, "kept-id");
 
-  // An imported id-less block does not gain a synthetic id after a round-trip
-  // through normalize → prepare.
   const roundTripped = prepareBlocksForChange(
     normalizeEditorBlocks([{ type: "text", props: { text: "Imported" } }]),
   );
@@ -149,29 +146,22 @@ test("normalizes editor block defaults and submission visibility", () => {
 });
 
 test("normalizeEditorBlocks preserves a single stored block object", () => {
-  // Arrays normalize element-by-element.
   assert.deepEqual(normalizeEditorBlocks([{ id: "a", type: "heading", props: {} }]), [
     { id: "a", type: "heading", hidden: undefined, props: {} },
   ]);
-  // A single block object (migration/corruption shape) is coerced into a
-  // one-element list instead of being shown as empty and overwritten.
   assert.deepEqual(
     normalizeEditorBlocks({ id: "hero-1", type: "heading", props: { text: "Hello", level: "h2" } }),
     [{ id: "hero-1", type: "heading", hidden: undefined, props: { text: "Hello", level: "h2" } }],
   );
-  // Non-block values still degrade to an empty list.
   assert.deepEqual(normalizeEditorBlocks({ foo: "bar" }), []);
   assert.deepEqual(normalizeEditorBlocks(null), []);
   assert.deepEqual(normalizeEditorBlocks("nope"), []);
 
-  // null/primitive/array slots are dropped, not turned into phantom blocks.
   assert.deepEqual(
     normalizeEditorBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
     [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
   );
 
-  // String hidden sentinels coerce to booleans (migration data) rather than
-  // dropping to undefined and rendering hidden blocks as visible.
   assert.equal(
     normalizeEditorBlocks([{ id: "x", type: "text", hidden: "true", props: {} }])[0].hidden,
     true,
@@ -181,7 +171,6 @@ test("normalizeEditorBlocks preserves a single stored block object", () => {
     false,
   );
 
-  // Duplicate ids are made unique so they never collide as React list keys.
   const deduped = normalizeEditorBlocks([
     { id: "dup", type: "text", props: { text: "A" } },
     { id: "dup", type: "text", props: { text: "B" } },
@@ -190,7 +179,6 @@ test("normalizeEditorBlocks preserves a single stored block object", () => {
   const ids = deduped.map((block) => block.id);
   assert.equal(ids[0], "dup");
   assert.equal(new Set(ids).size, 3, "all ids unique");
-  // Block content/order is preserved; only colliding ids change.
   assert.equal(deduped[1].props.text, "B");
 });
 
@@ -248,10 +236,7 @@ test("normalizes media values from stored values and API items", () => {
     { src: "/fallback.jpg" },
   ]);
 
-  // Empty-string id/src yield no usable identity, so they are filtered out
-  // rather than collapsing onto a shared "" dedup/React key.
   assert.deepEqual(mediaValues([{ id: "" }, { src: "" }]), []);
-  // A non-empty identity from any source keeps the value.
   assert.deepEqual(mediaValues([{ id: "", src: "https://cdn/x.jpg" }]), [
     { id: "", src: "https://cdn/x.jpg" },
   ]);
@@ -295,12 +280,10 @@ Intro **bold** _em_ \`code\` [safe](/safe) [bad](javascript:alert) ~~old~~
 test("intraword underscores are preserved (not parsed as emphasis)", () => {
   const [block] = portableTextBlocks("foo_bar_baz and my_file_name");
   assert.equal(textOf(block), "foo_bar_baz and my_file_name");
-  // No emphasis spans were created from the intraword underscores.
   for (const span of block.children) {
     assert.deepEqual(span.marks ?? [], []);
   }
 
-  // Genuine word-boundary emphasis still works.
   const [emphasized] = portableTextBlocks("an _italic_ word");
   assert.deepEqual(spanWithText(emphasized, "italic").marks, ["em"]);
   assert.equal(textOf(emphasized), "an italic word");
@@ -352,8 +335,6 @@ test("renders portable text as escaped editor HTML with sanitized links and list
 });
 
 test("portableTextToEditorHtml tolerates malformed stored blocks without throwing", () => {
-  // Non-array children, non-string text, non-array marks/markDefs, and a
-  // non-string href must degrade gracefully rather than crash the editor.
   assert.doesNotThrow(() =>
     portableTextToEditorHtml([
       { _type: "block", _key: "k1", children: "oops" },
@@ -396,13 +377,11 @@ test("encodes and restores nested list level across editor HTML", () => {
     },
   ];
 
-  // Export carries the nested level via data-level (only when > 1).
   assert.equal(
     portableTextToEditorHtml(leveled),
     '<ul><li>One</li><li data-level="2">Two</li></ul>',
   );
 
-  // Import restores the level from data-level.
   const previousHTMLElement = globalThis.HTMLElement;
   globalThis.HTMLElement = TestElement;
   try {

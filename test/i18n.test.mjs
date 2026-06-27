@@ -29,8 +29,6 @@ test("block messages follow the EmDash-style fallback chain", () => {
 });
 
 test("block message override on a later fallback locale is not shadowed by the en default", () => {
-  // Chain routes through "en" (which has no override) before "brand" (which
-  // does). The built-in English default must not short-circuit the lookup.
   const i18n = {
     locale: "en",
     defaultLocale: "en",
@@ -40,7 +38,6 @@ test("block message override on a later fallback locale is not shadowed by the e
 
   assert.deepEqual(localeFallbacks(i18n), ["en", "brand"]);
   assert.equal(blockMessage("addBlock", i18n), "Block hinzufügen");
-  // A key with no override anywhere still resolves to the built-in default.
   assert.equal(blockMessage("removeBlock", i18n), "Remove block");
 });
 
@@ -108,7 +105,6 @@ test("core image/file types render the media picker, not a text input", () => {
     }),
   );
 
-  // MediaPropField renders the single-select picker with the "No media" option.
   const noMediaCount = (html.match(/No media/g) ?? []).length;
   assert.equal(noMediaCount, 2, "both image and file fields render a media picker");
 });

@@ -1,3 +1,9 @@
+/**
+ * Locale fallback resolution for block-field labels and admin chrome messages.
+ *
+ * `localeFallbacks` walks the configured chain; `localizedString` and `blockMessage`
+ * pick the first non-empty override before falling back to built-in English defaults.
+ */
 export type LocalizedString = string | Record<string, string | undefined>;
 
 export type BlocksMessageKey =
@@ -96,6 +102,7 @@ export function normalizeLocale(locale: string | null | undefined): string {
   return (locale ?? DEFAULT_LOCALE).trim() || DEFAULT_LOCALE;
 }
 
+/** Builds the ordered locale chain: active locale, configured fallbacks, then default. */
 export function localeFallbacks(i18n: BlocksI18nConfig | string | null | undefined): string[] {
   const config = typeof i18n === "string" ? { locale: i18n } : (i18n ?? {});
   const defaultLocale = normalizeLocale(config.defaultLocale ?? DEFAULT_BLOCKS_I18N.defaultLocale);
@@ -119,6 +126,7 @@ export function localeFallbacks(i18n: BlocksI18nConfig | string | null | undefin
   return chain;
 }
 
+/** Resolves a localized label string across the locale fallback chain. */
 export function localizedString(
   value: LocalizedString | null | undefined,
   i18n: BlocksI18nConfig | string | null | undefined,
@@ -141,16 +149,15 @@ export function localizedString(
   return first ?? fallback;
 }
 
+/** Resolves an admin UI message key across the full locale fallback chain. */
 export function blockMessage(
   key: BlocksMessageKey,
   i18n: BlocksI18nConfig | string | null | undefined,
 ): string {
   const config = typeof i18n === "string" ? { locale: i18n } : (i18n ?? {});
 
-  // Consult the entire fallback chain for a configured override before falling
-  // back to the built-in English default. Returning the built-in default at the
-  // DEFAULT_LOCALE position mid-loop would shadow an override on a later
-  // fallback-chain locale (mirrors localizedString's resolution order).
+  // Walk every fallback locale before using the built-in English default so a
+  // later-chain override is not shadowed by an empty `en` slot.
   for (const locale of localeFallbacks(config)) {
     const override = config.messages?.[locale]?.[key];
     if (typeof override === "string" && override.length > 0) return override;
@@ -162,6 +169,7 @@ export function blockMessage(
   return DEFAULT_BLOCKS_I18N.messages.en[key] ?? key;
 }
 
+/** Substitutes `{name}` placeholders in a resolved block message. */
 export function formatBlockMessage(
   key: BlocksMessageKey,
   i18n: BlocksI18nConfig | string | null | undefined,

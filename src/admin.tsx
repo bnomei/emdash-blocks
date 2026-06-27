@@ -1,3 +1,10 @@
+/**
+ * EmDash admin field widget for editing stored block-list JSON.
+ *
+ * Renders the `blocks` JSON field: per-block type selection, schema-driven prop
+ * editors (portable text, media, JSON), and commit normalization via
+ * `prepareBlocksForChange`.
+ */
 import { Button, Input, MenuBar, Select, Switch, Textarea } from "@cloudflare/kumo";
 import {
   ArrowDownIcon,
@@ -271,16 +278,12 @@ function inputType(field: BlockBuilderPropField) {
 
 function normalizeNumber(value: string, integer: boolean) {
   const trimmed = value.trim();
-  // Whitespace-only input is not a numeric token; treat it like empty so it
-  // clears (undefined) instead of Number("   ") coercing to 0.
   if (trimmed === "") return undefined;
   const number = integer ? Number.parseInt(trimmed, 10) : Number(trimmed);
   return Number.isFinite(number) ? number : undefined;
 }
 
-// Interpret stored boolean props for the switch's checked state. Migrated/raw
-// JSON can carry string sentinels; "false"/"0"/"" are logical false even though
-// they are truthy strings in JS.
+// Migration JSON may store booleans as string sentinels ("false", "0", "").
 function normalizeBooleanValue(value: unknown): boolean {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
@@ -308,9 +311,7 @@ function NumberPropField({
   placeholder?: string;
   integer: boolean;
 }) {
-  // Keep a local draft string so intermediate values like "-", "-0" or "1."
-  // are not wiped while typing. The committed value still flows through
-  // normalizeNumber; the draft only resyncs when the external value diverges.
+  // Local draft preserves partial numeric input ("-", "1.") until commit-ready.
   const valueKey = typeof value === "number" ? String(value) : "";
   const [draft, setDraft] = useState(() => valueKey);
 
@@ -333,8 +334,6 @@ function NumberPropField({
           const next = event.currentTarget.value;
           setDraft(next);
           const parsed = normalizeNumber(next, integer);
-          // Commit cleared input (undefined) or a complete finite number; keep
-          // intermediate prefixes ("-", "1.") in the draft without committing.
           if (next.trim() === "" || parsed !== undefined) onChange(parsed);
         }}
       />
@@ -400,8 +399,6 @@ function MediaPropField({
         const body = (await response.json()) as { data?: { items?: MediaItem[] } };
         const fetchedItems = body.data?.items ?? [];
         setItems(fetchedItems);
-        // A full page likely means the library has more assets than were
-        // returned, so surface that the picker list is truncated.
         setTruncated(fetchedItems.length >= MEDIA_LIBRARY_FETCH_LIMIT);
         setStatus("idle");
       } catch {
@@ -413,8 +410,7 @@ function MediaPropField({
 
     void loadMedia();
 
-    // Refetch when the window regains focus so assets uploaded elsewhere in the
-    // session become selectable without remounting the field.
+    // Refetch on focus so uploads elsewhere in the admin session appear in the picker.
     function handleFocus() {
       void loadMedia();
     }
@@ -530,9 +526,7 @@ function PortableTextPropField({
   const valueKey = JSON.stringify(value ?? null);
   const editorRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState(() => portableTextToEditorHtml(value));
-  // Set when an external `value` update arrives while the editor is focused and
-  // the user has not yet re-edited. Blur then resyncs to the external value
-  // instead of committing pre-update DOM over it.
+  // Set when a newer external value arrives during a focused edit; blur resyncs instead of committing stale DOM.
   const externalUpdateWhileFocusedRef = useRef(false);
 
   useEffect(() => {
@@ -547,8 +541,6 @@ function PortableTextPropField({
 
   function commit() {
     if (externalUpdateWhileFocusedRef.current) {
-      // A newer external value arrived during this edit session and the user
-      // did not edit further; resync the DOM to it rather than overwriting it.
       externalUpdateWhileFocusedRef.current = false;
       const syncedHtml = portableTextToEditorHtml(value);
       setHtml(syncedHtml);
@@ -560,8 +552,6 @@ function PortableTextPropField({
   }
 
   function runCommand(command: string, commandValue?: string) {
-    // Toolbar actions are deliberate edits, so the editor content is now
-    // authoritative again.
     externalUpdateWhileFocusedRef.current = false;
     editorCommandAdapter.dispatchCommand(editorRef.current, command, commandValue);
     setHtml(editorRef.current?.innerHTML ?? "");
@@ -569,10 +559,7 @@ function PortableTextPropField({
   }
 
   function createLink() {
-    // window.prompt blurs the editor and clears the selection, so capture the
-    // active range before prompting and restore it before execCommand runs;
-    // otherwise createLink applies to no selection and the highlighted text is
-    // not linked.
+    // prompt() blurs the editor; restore the selection before createLink runs.
     const selection = globalThis.getSelection?.();
     const savedRange =
       selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
@@ -817,17 +804,11 @@ function renderPropField(
   }
 
   if (type === "json" || type === "repeater" || type === "reference") {
-    // `reference` is a structured value (id/object), not free text, so edit it
-    // through the JSON editor rather than letting it fall through to a plain
-    // text input that would persist a raw string.
     const fallback =
       type === "repeater" ? blockMessage("jsonStringArray", i18n) : blockMessage("jsonValue", i18n);
     return renderJsonLikePropField(field, value, onChange, id, fallback, i18n);
   }
 
-  // The exported core types `image`/`file` denote media objects; route them to
-  // the media picker alongside the bundled `media` alias so they store a media
-  // object instead of a raw string typed into a text box.
   if (type === "media" || type === "media-list" || type === "image" || type === "file") {
     return (
       <MediaPropField
@@ -898,9 +879,7 @@ function JsonLikePropField({
   const focusedRef = useRef(false);
 
   useEffect(() => {
-    // Don't clobber an in-progress draft while the user is editing; resync the
-    // controlled textarea only when it is not focused (mirrors the
-    // portable-text focus guard). The draft commits on blur.
+    // Skip resync while focused so an in-progress JSON draft is not clobbered.
     if (focusedRef.current) return;
     setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
     setParseError(null);
@@ -913,9 +892,7 @@ function JsonLikePropField({
       return;
     }
     if (field.type === "repeater") {
-      // Repeater props are array-shaped. Clearing the field (undefined) or a
-      // literal null persists []; any other non-array (object/primitive) is
-      // rejected rather than breaking the array contract.
+      // Repeater props are array-shaped; clear commits [] not undefined.
       if (result.value === undefined || result.value === null) {
         setParseError(null);
         onChange([]);
@@ -926,9 +903,8 @@ function JsonLikePropField({
         return;
       }
     }
+    // Clearing a json field commits {} to preserve the object prop shape.
     if (field.type === "json" && result.value === undefined) {
-      // Clearing a json field persists an empty object rather than dropping the
-      // prop to undefined and losing its object shape.
       setParseError(null);
       onChange({});
       return;
@@ -1004,9 +980,7 @@ function RawPropsField({
   idPrefix: string;
   i18n: BlocksI18nConfig;
 }) {
-  // Controlled textarea that resyncs when the parent props change (e.g. after a
-  // block type change resets props). An uncontrolled defaultValue would keep
-  // showing the previous JSON and could restore it on a no-edit blur.
+  // Controlled fallback editor: resyncs when block type change resets props.
   const valueKey = JSON.stringify(props ?? {});
   const [draft, setDraft] = useState(() => JSON.stringify(props ?? {}, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
@@ -1088,6 +1062,7 @@ function renderPropsEditor(
   );
 }
 
+/** EmDash field widget entry point for JSON block-list values. */
 export function BlocksField({
   value,
   onChange,
@@ -1226,6 +1201,7 @@ export function BlocksField({
   );
 }
 
+/** Field widget map registered with the EmDash admin runtime. */
 export const fields = {
   blocks: BlocksField,
 };

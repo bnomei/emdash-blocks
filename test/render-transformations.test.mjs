@@ -29,7 +29,6 @@ test("normalizes malformed blocks with stable fallback values", () => {
     },
   );
 
-  // String hidden sentinels coerce to booleans instead of dropping to undefined.
   assert.equal(normalizeBlock({ id: "a", type: "text", hidden: "true", props: {} }).hidden, true);
   assert.equal(normalizeBlock({ id: "b", type: "text", hidden: "false", props: {} }).hidden, false);
   assert.equal(normalizeBlock({ id: "c", type: "text", hidden: "0", props: {} }).hidden, false);
@@ -39,12 +38,10 @@ test("normalizes malformed blocks with stable fallback values", () => {
   assert.deepEqual(normalizeBlocks(null), []);
   assert.deepEqual(normalizeBlocks(undefined), []);
 
-  // Non-array truthy stored JSON must degrade to an empty list, not throw.
   assert.deepEqual(normalizeBlocks({ id: "hero-1", type: "heading", props: {} }), []);
   assert.deepEqual(normalizeBlocks("not-an-array"), []);
   assert.deepEqual(visibleBlocks({ id: "hero-1", type: "heading", props: {} }), []);
 
-  // null/primitive/array slots are dropped, not rendered as phantom blocks.
   assert.deepEqual(
     normalizeBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
     [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],

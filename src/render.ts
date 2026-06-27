@@ -1,13 +1,16 @@
+/**
+ * Runtime normalization and visibility filtering for stored block-list JSON.
+ *
+ * Used by frontend render paths to coerce migrated or partial payloads into stable
+ * block records and to drop `hidden` blocks from published output.
+ */
 import type { BlockBuilderBlock, BlockBuilderValue } from "./types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-// Coerce a stored `hidden` flag to a boolean. Migrated JSON often carries string
-// sentinels ("true"/"false"/"yes"/"1"/...); keeping only real booleans dropped
-// those to undefined, silently rendering hidden blocks as visible (and a raw
-// `!block.hidden` check treats the truthy string "false" as hidden).
+/** Coerces stored `hidden` values, including migration string sentinels, to boolean. */
 export function normalizeHidden(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -23,6 +26,7 @@ export function normalizeHidden(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Type guard for a block record with a string `type` and object `props`. */
 export function isBlockBuilderBlock(value: unknown): value is BlockBuilderBlock {
   return (
     isRecord(value) &&
@@ -31,6 +35,7 @@ export function isBlockBuilderBlock(value: unknown): value is BlockBuilderBlock 
   );
 }
 
+/** Fills missing id, type, and props on one block without dropping unknown fields. */
 export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilderBlock {
   const record: Record<string, unknown> = isRecord(value) ? value : {};
   const props = isRecord(record.props) ? record.props : {};
@@ -43,18 +48,19 @@ export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilde
   };
 }
 
+/** Normalizes an array of blocks; non-arrays and non-record slots become `[]`. */
 export function normalizeBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
-  // Drop null/primitive/array slots so sparse or corrupted arrays do not
-  // render phantom empty text blocks.
   return Array.isArray(blocks)
     ? blocks.filter(isRecord).map((block, index) => normalizeBlock(block, index))
     : [];
 }
 
+/** Returns normalized blocks with `hidden` entries removed for render output. */
 export function visibleBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
   return normalizeBlocks(blocks).filter((block) => !block.hidden);
 }
 
+/** Reads a block's props object, defaulting to `{}` when missing or non-object. */
 export function blockProps(block: BlockBuilderBlock): Record<string, unknown> {
   return block.props && typeof block.props === "object" && !Array.isArray(block.props)
     ? block.props

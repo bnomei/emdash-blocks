@@ -1,3 +1,10 @@
+/**
+ * Admin-side transforms for the block-list field editor.
+ *
+ * Normalizes stored JSON for editing, round-trips portable text through
+ * contenteditable HTML, resolves media identities, and prepares block lists for
+ * commit (synthetic id stripping, duplicate-id repair).
+ */
 import { safeLinkHref } from "./linkProtocols";
 import { normalizeHidden } from "./render";
 import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
@@ -108,6 +115,7 @@ export function isBlockBuilderProps(value: unknown): value is BlockBuilderProps 
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Normalizes one block for display, synthesizing id/type defaults when missing. */
 export function normalizeEditorBlock(value: unknown, index: number): BlockBuilderBlock {
   const record = asRecord(value);
   const props = isBlockBuilderProps(record.props) ? record.props : {};
@@ -124,8 +132,7 @@ function isBlockRecord(value: unknown): boolean {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// Ensure every block has a unique id. Duplicate ids would collide as React
-// list keys and bind stateful per-block editors to the wrong row.
+// Duplicate ids break React list keys for stateful per-block editors.
 function dedupeBlockIds(blocks: BlockBuilderValue): BlockBuilderValue {
   const seen = new Set<string>();
   return blocks.map((block, index) => {
@@ -140,17 +147,14 @@ function dedupeBlockIds(blocks: BlockBuilderValue): BlockBuilderValue {
   });
 }
 
+/** Normalizes stored JSON for the admin editor, including single-object corruption shapes. */
 export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
   if (Array.isArray(value)) {
-    // Drop null/primitive/array slots so sparse or corrupted arrays do not
-    // materialize phantom empty text blocks that get persisted on save.
     return dedupeBlockIds(
       value.filter(isBlockRecord).map((item, index) => normalizeEditorBlock(item, index)),
     );
   }
-  // A single stored block object (a plausible migration/corruption shape) is
-  // coerced into a one-element list so its content is shown and preserved,
-  // rather than presented as empty and silently overwritten on the first edit.
+  // A lone block object (migration shape) becomes a one-element list instead of [].
   if (
     value &&
     typeof value === "object" &&
@@ -162,17 +166,13 @@ export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
   return [];
 }
 
-// Matches the display-only ids normalizeEditorBlock synthesizes for imported
-// id-less blocks ("block-1", "block-2", ...). Created blocks use randomId
-// (a UUID or "block-<base36>-<rand>"), which never matches this exact shape.
+// Display-only ids assigned to imported id-less blocks; never persisted on commit.
 const SYNTHETIC_BLOCK_ID = /^block-\d+$/;
 
+/** Strips synthetic ids and omits falsey `hidden` before writing stored JSON. */
 export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuilderValue {
   return nextBlocks.map((block) => {
     const prepared: BlockBuilderBlock = { ...block, hidden: block.hidden || undefined };
-    // Don't persist a synthetic index-based id into stored JSON; keep imported
-    // id-less content id-less rather than mutating its identity on the first
-    // unrelated edit. The id is re-synthesized for display/keys on next read.
     if (SYNTHETIC_BLOCK_ID.test(prepared.id)) {
       delete (prepared as { id?: string }).id;
     }
@@ -180,6 +180,7 @@ export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuil
   });
 }
 
+/** Merges configured, default, and in-use unknown block types for the type picker. */
 export function resolveBlockDefinitions(
   blocks: BlockBuilderValue,
   options?: BlockBuilderOptions,
@@ -219,6 +220,7 @@ export function createBlockForDefinition(
   };
 }
 
+/** Switches a block's type and resets props to the target definition's defaults. */
 export function blockWithType(
   block: BlockBuilderBlock,
   nextType: string,
@@ -232,6 +234,7 @@ export function blockWithType(
   };
 }
 
+/** Parses a JSON textarea draft; whitespace-only input yields `undefined`. */
 export function parseJsonDraft(value: string): JsonDraftParseResult {
   try {
     return { ok: true, value: value.trim() ? JSON.parse(value) : undefined };
@@ -261,13 +264,10 @@ export function parsePropsDraft(value: string): PropsDraftParseResult {
   return { ok: true, value: result.value };
 }
 
+/** Type guard requiring a non-empty media identity (id, src, previewUrl, or storageKey). */
 export function isMediaValue(value: unknown): value is MediaValue {
   const record = asRecord(value);
   if (typeof record.id !== "string" && typeof record.src !== "string") return false;
-  // Require a non-empty identity source so a value that survives mediaValues can
-  // always derive a stable, unique key. Empty-string id/src would collapse
-  // distinct entries onto the same dedup/React key and make a single remove
-  // delete every empty-identity entry at once.
   const identitySources = [record.id, record.src, record.previewUrl, asRecord(record.meta).storageKey];
   return identitySources.some((candidate) => typeof candidate === "string" && candidate.length > 0);
 }
@@ -290,6 +290,7 @@ export function mediaIdentity(value: MediaValue): string {
   return value.id || mediaStorageKey(value) || value.src || value.previewUrl || "";
 }
 
+/** Resolves a preview or API URL for a stored media value. */
 export function mediaUrl(value: MediaValue): string {
   if (typeof value.previewUrl === "string" && value.previewUrl) return value.previewUrl;
   if (typeof value.src === "string" && value.src) return value.src;
@@ -300,11 +301,11 @@ export function mediaUrl(value: MediaValue): string {
   return "";
 }
 
+/** Encodes a storage key for media URLs, dropping traversal segments. */
 export function encodeStorageKey(storageKey: string): string {
-  // Drop empty, "." and ".." segments so a stored storageKey cannot produce a
-  // path-traversal URL (e.g. "../../sensitive") when used as an <img src>.
   return storageKey
     .split("/")
+    // Reject `.` and `..` so a stored key cannot escape the media file root.
     .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
     .map(encodeURIComponent)
     .join("/");
@@ -348,6 +349,7 @@ function normalizeMarkdownSource(value: string): string {
   return value.replace(/^(#{1,6})(?=\S)/gm, "$1 ");
 }
 
+/** Converts a markdown string into portable-text blocks for import and writer fields. */
 export function markdownToPortableText(value: string): PortableTextBlock[] {
   const blocks: PortableTextBlock[] = [];
   const lines = normalizeMarkdownSource(value).split("\n");
@@ -421,10 +423,7 @@ function parseInlineMarkdown(text: string): {
 } {
   const children: PortableTextSpan[] = [];
   const markDefs: PortableTextMarkDef[] = [];
-  // The `_` emphasis alternative requires alphanumeric word boundaries (per
-  // CommonMark's intraword rule) so `foo_bar_baz`, snake_case, and filenames are
-  // not parsed as emphasis — which would otherwise delete the underscores. The
-  // zero-width lookbehind/lookahead keep group numbering and match[0] intact.
+  // Underscore emphasis requires word boundaries (CommonMark intraword rule).
   const pattern =
     /(\*\*(.+?)\*\*)|((?<![A-Za-z0-9])_(.+?)_(?![A-Za-z0-9]))|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(~~(.+?)~~)/g;
   let cursor = 0;
@@ -465,6 +464,7 @@ function makeSpan(text: string, marks: string[] = []): PortableTextSpan {
   return { _type: "span", _key: randomId("span"), text, marks };
 }
 
+/** Serializes portable text to contenteditable HTML for the admin rich-text field. */
 export function portableTextToEditorHtml(value: unknown): string {
   const blocks = portableTextBlocks(value);
   if (!blocks.length) return "";
@@ -509,9 +509,7 @@ export function portableTextToEditorHtml(value: unknown): string {
 }
 
 function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[]): string {
-  // Stored portable text is untrusted (imports/migrations/API writes), so
-  // coerce every nested shape defensively: a non-array children/marks/markDefs
-  // or a non-string text must not throw during render and crash the editor.
+  // Stored portable text may carry non-array children; degrade instead of throwing.
   const safeSpans = Array.isArray(spans) ? spans : [];
   const safeMarkDefs = Array.isArray(markDefs) ? markDefs : [];
   return safeSpans
@@ -536,6 +534,7 @@ function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[])
     .join("");
 }
 
+/** Parses contenteditable HTML back into portable-text blocks on editor blur. */
 export function editorHtmlToPortableText(
   element: HTMLElement | ElementLike | null,
 ): PortableTextBlock[] {
@@ -586,9 +585,6 @@ function appendPortableTextNode(
   }
 
   if (/^h[1-6]$/.test(tag)) {
-    // Preserve the full h1-h6 range; the export path (portableTextToEditorHtml)
-    // already emits these faithfully, so capping here downgraded h5/h6 to h4 on
-    // an untouched open/blur round-trip.
     blocks.push(elementToTextBlock(node, tag));
     return;
   }
@@ -601,17 +597,11 @@ function appendPortableTextNode(
   node.childNodes.forEach((child) => appendPortableTextNode(child, blocks));
 }
 
-// Restore the nested list level: prefer the data-level attribute emitted by
-// portableTextToEditorHtml, otherwise fall back to the structural nesting depth
-// derived from how deep the <ul>/<ol> ancestry is.
 function listItemLevel(element: ElementLike, fallback: number): number {
   const raw = Number(element.getAttribute("data-level"));
   return Number.isInteger(raw) && raw > 1 ? raw : fallback;
 }
 
-// Emit one block for a list item from its inline content only, then recurse into
-// any nested <ul>/<ol> so their items become their own blocks (at the next
-// level) instead of being fused into this item's text.
 function appendListItem(
   item: ElementLike,
   blocks: PortableTextBlock[],
@@ -659,11 +649,6 @@ function isBlockLevelTag(tag: string): boolean {
   );
 }
 
-// Serialize a <p>/<div> container: contiguous inline content becomes a text
-// block, while block-level children (lists, nested divs, headings, ...) are
-// split out into their own blocks via appendPortableTextNode, preserving
-// document order. Otherwise a list pasted inside a <p> would flatten its items
-// into the paragraph's text.
 function appendBlockContainer(node: ElementLike, blocks: PortableTextBlock[], style = "normal") {
   let inlineRun: Array<ChildNode | TextNodeLike | ElementLike> = [];
 

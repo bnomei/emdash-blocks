@@ -1,8 +1,15 @@
+/**
+ * Admin locale reader for the `emdash-locale` cookie.
+ *
+ * `useAdminLocale` re-syncs on window focus and a short interval so locale
+ * switches elsewhere in the admin UI propagate to the blocks field widget.
+ */
 import { useEffect, useState } from "react";
 import { DEFAULT_LOCALE, normalizeLocale } from "./i18n";
 
 const LOCALE_COOKIE_NAME = "emdash-locale";
 
+/** Reads the active admin locale from the `emdash-locale` cookie. */
 export function readAdminLocale(fallback = DEFAULT_LOCALE): string {
   const normalizedFallback = normalizeLocale(fallback);
 
@@ -23,6 +30,7 @@ export function readAdminLocale(fallback = DEFAULT_LOCALE): string {
   }
 }
 
+/** React hook that tracks the admin locale cookie across focus and navigation. */
 export function useAdminLocale(fallback = DEFAULT_LOCALE): string {
   const [locale, setLocale] = useState(() => readAdminLocale(fallback));
 
