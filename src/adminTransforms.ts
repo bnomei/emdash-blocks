@@ -556,7 +556,7 @@ function appendPortableTextNode(
   }
 
   if (tag === "p" || tag === "div") {
-    blocks.push(elementToTextBlock(node));
+    appendBlockContainer(node, blocks);
     return;
   }
 
@@ -607,6 +607,54 @@ function appendListItem(
   for (const nested of nestedLists) {
     appendPortableTextNode(nested, blocks, itemLevel + 1);
   }
+}
+
+function isBlockLevelTag(tag: string): boolean {
+  return (
+    tag === "ul" ||
+    tag === "ol" ||
+    tag === "li" ||
+    tag === "p" ||
+    tag === "div" ||
+    tag === "blockquote" ||
+    /^h[1-6]$/.test(tag)
+  );
+}
+
+// Serialize a <p>/<div> container: contiguous inline content becomes a text
+// block, while block-level children (lists, nested divs, headings, ...) are
+// split out into their own blocks via appendPortableTextNode, preserving
+// document order. Otherwise a list pasted inside a <p> would flatten its items
+// into the paragraph's text.
+function appendBlockContainer(node: ElementLike, blocks: PortableTextBlock[], style = "normal") {
+  let inlineRun: Array<ChildNode | TextNodeLike | ElementLike> = [];
+
+  const flushInlineRun = () => {
+    if (!inlineRun.length) return;
+    const markDefs: PortableTextMarkDef[] = [];
+    const children = inlineNodesToSpans(inlineRun, [], markDefs);
+    if (children.some((span) => (span.text ?? "").trim())) {
+      blocks.push({
+        _type: "block",
+        _key: randomId("pt"),
+        style,
+        markDefs,
+        children,
+      });
+    }
+    inlineRun = [];
+  };
+
+  for (const child of Array.from(node.childNodes)) {
+    const childTag = isElementLike(child) ? child.tagName.toLowerCase() : "";
+    if (childTag && isBlockLevelTag(childTag)) {
+      flushInlineRun();
+      appendPortableTextNode(child, blocks);
+    } else {
+      inlineRun.push(child);
+    }
+  }
+  flushInlineRun();
 }
 
 function elementToTextBlock(element: ElementLike, style = "normal"): PortableTextBlock {

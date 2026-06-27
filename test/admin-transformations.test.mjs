@@ -423,6 +423,35 @@ test("keeps nested list items as their own blocks instead of fusing into parent"
   }
 });
 
+test("splits a list nested inside a paragraph into list blocks", () => {
+  const previousHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement = TestElement;
+
+  try {
+    const blocks = editorHtmlToPortableText(
+      element("div", [
+        element("p", [
+          text("Intro"),
+          element("ul", [element("li", [text("One")]), element("li", [text("Two")])]),
+          text("After"),
+        ]),
+      ]),
+    );
+
+    assert.equal(blocks.length, 4);
+    assert.equal(blocks[0].style, "normal");
+    assert.equal(textOf(blocks[0]), "Intro");
+    assert.equal(blocks[1].listItem, "bullet");
+    assert.equal(textOf(blocks[1]), "One");
+    assert.equal(blocks[2].listItem, "bullet");
+    assert.equal(textOf(blocks[2]), "Two");
+    assert.equal(blocks[3].listItem, undefined);
+    assert.equal(textOf(blocks[3]), "After");
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
+});
+
 test("preserves h5 and h6 heading levels on editor HTML round-trip", () => {
   const previousHTMLElement = globalThis.HTMLElement;
   globalThis.HTMLElement = TestElement;
