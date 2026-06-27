@@ -267,6 +267,51 @@ test("renders portable text as escaped editor HTML with sanitized links and list
   );
 });
 
+test("encodes and restores nested list level across editor HTML", () => {
+  const leveled = [
+    {
+      _type: "block",
+      _key: "a",
+      listItem: "bullet",
+      level: 1,
+      children: [{ _type: "span", _key: "s1", text: "One" }],
+      markDefs: [],
+    },
+    {
+      _type: "block",
+      _key: "b",
+      listItem: "bullet",
+      level: 2,
+      children: [{ _type: "span", _key: "s2", text: "Two" }],
+      markDefs: [],
+    },
+  ];
+
+  // Export carries the nested level via data-level (only when > 1).
+  assert.equal(
+    portableTextToEditorHtml(leveled),
+    '<ul><li>One</li><li data-level="2">Two</li></ul>',
+  );
+
+  // Import restores the level from data-level.
+  const previousHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement = TestElement;
+  try {
+    const blocks = editorHtmlToPortableText(
+      element("div", [
+        element("ul", [
+          element("li", [text("One")]),
+          element("li", [text("Two")], { "data-level": "2" }),
+        ]),
+      ]),
+    );
+    assert.equal(blocks[0].level, 1);
+    assert.equal(blocks[1].level, 2);
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
+});
+
 test("converts editor HTML nodes to portable text blocks", () => {
   const previousHTMLElement = globalThis.HTMLElement;
   globalThis.HTMLElement = TestElement;

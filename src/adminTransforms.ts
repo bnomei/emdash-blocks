@@ -421,7 +421,9 @@ export function portableTextToEditorHtml(value: unknown): string {
         html += block.listItem === "number" ? "<ol>" : "<ul>";
         openList = block.listItem;
       }
-      html += `<li>${content}</li>`;
+      const levelAttr =
+        typeof block.level === "number" && block.level > 1 ? ` data-level="${block.level}"` : "";
+      html += `<li${levelAttr}>${content}</li>`;
       continue;
     }
 
@@ -498,13 +500,13 @@ function appendPortableTextNode(
     const listItem = tag === "ol" ? "number" : "bullet";
     node.querySelectorAll(":scope > li").forEach((item) => {
       if (!isElementLike(item)) return;
-      blocks.push(elementToTextBlock(item, "normal", listItem));
+      blocks.push(elementToTextBlock(item, "normal", listItem, listItemLevel(item)));
     });
     return;
   }
 
   if (tag === "li") {
-    blocks.push(elementToTextBlock(node, "normal", "bullet"));
+    blocks.push(elementToTextBlock(node, "normal", "bullet", listItemLevel(node)));
     return;
   }
 
@@ -529,10 +531,18 @@ function appendPortableTextNode(
   node.childNodes.forEach((child) => appendPortableTextNode(child, blocks));
 }
 
+// Restore the nested list level from the data-level attribute emitted by
+// portableTextToEditorHtml, defaulting to 1 for top-level / un-annotated items.
+function listItemLevel(element: ElementLike): number {
+  const raw = Number(element.getAttribute("data-level"));
+  return Number.isInteger(raw) && raw > 1 ? raw : 1;
+}
+
 function elementToTextBlock(
   element: ElementLike,
   style = "normal",
   listItem?: "bullet" | "number",
+  level = 1,
 ): PortableTextBlock {
   const markDefs: PortableTextMarkDef[] = [];
   const children = inlineNodesToSpans(Array.from(element.childNodes), [], markDefs);
@@ -540,7 +550,7 @@ function elementToTextBlock(
     _type: "block",
     _key: randomId("pt"),
     style,
-    ...(listItem ? { listItem, level: 1 } : {}),
+    ...(listItem ? { listItem, level } : {}),
     markDefs,
     children: children.length ? children : [makeSpan("")],
   };
