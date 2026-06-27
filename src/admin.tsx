@@ -815,6 +815,45 @@ function renderJsonLikePropField(
   );
 }
 
+function RawPropsField({
+  props,
+  onChange,
+  idPrefix,
+  i18n,
+}: {
+  props: BlockBuilderProps;
+  onChange: (value: BlockBuilderProps) => void;
+  idPrefix: string;
+  i18n: BlocksI18nConfig;
+}) {
+  // Controlled textarea that resyncs when the parent props change (e.g. after a
+  // block type change resets props). An uncontrolled defaultValue would keep
+  // showing the previous JSON and could restore it on a no-edit blur.
+  const valueKey = JSON.stringify(props ?? {});
+  const [draft, setDraft] = useState(() => JSON.stringify(props ?? {}, null, 2));
+
+  useEffect(() => {
+    setDraft(JSON.stringify(props ?? {}, null, 2));
+  }, [valueKey]);
+
+  return (
+    <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
+      <span style={labelStyle}>{blockMessage("props", i18n)}</span>
+      <Textarea
+        id={`${idPrefix}-props`}
+        aria-label={blockMessage("blockProps", i18n)}
+        className="min-h-28 w-full font-mono text-sm"
+        value={draft}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.currentTarget.value)}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          const nextProps = parseProps(event.currentTarget.value);
+          if (nextProps) onChange(nextProps);
+        }}
+      />
+    </label>
+  );
+}
+
 function renderPropsEditor(
   definition: BlockBuilderDefinition | undefined,
   props: BlockBuilderProps,
@@ -824,19 +863,7 @@ function renderPropsEditor(
 ) {
   if (!definition?.props) {
     return (
-      <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
-        <span style={labelStyle}>{blockMessage("props", i18n)}</span>
-        <Textarea
-          id={`${idPrefix}-props`}
-          aria-label={blockMessage("blockProps", i18n)}
-          className="min-h-28 w-full font-mono text-sm"
-          defaultValue={JSON.stringify(props ?? {}, null, 2)}
-          onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
-            const nextProps = parseProps(event.currentTarget.value);
-            if (nextProps) onChange(nextProps);
-          }}
-        />
-      </label>
+      <RawPropsField props={props} onChange={onChange} idPrefix={idPrefix} i18n={i18n} />
     );
   }
 
