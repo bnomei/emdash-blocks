@@ -1,3 +1,10 @@
+/**
+ * EmDash plugin entry for the block-list field widget.
+ *
+ * Re-exports the runtime normalization API, schema defaults, i18n helpers, and link
+ * policy used by both admin and frontend consumers. `blockBuilderPlugin` and
+ * `createPlugin` register the JSON `blocks` field widget with EmDash.
+ */
 import { definePlugin, type PluginDescriptor } from "emdash";
 import { blockMessage, type BlocksI18nConfig } from "./i18n";
 
@@ -40,6 +47,7 @@ export {
   emdashCorePropFieldTypes,
 } from "./schema";
 
+/** Options for registering the block-builder plugin with EmDash. */
 export type BlockBuilderDescriptorOptions = {
   entrypoint?: string;
   adminEntry?: string;
@@ -50,6 +58,7 @@ const PLUGIN_ID = "block-builder";
 const PLUGIN_VERSION = "0.2.0";
 const PACKAGE_NAME = "@bnomei/emdash-blocks";
 
+/** Returns a native-format EmDash plugin descriptor for the block-list field. */
 export function blockBuilderPlugin(options: BlockBuilderDescriptorOptions = {}): PluginDescriptor {
   const entrypoint = options.entrypoint ?? PACKAGE_NAME;
   const adminEntry = options.adminEntry ?? `${entrypoint}/admin`;
@@ -64,6 +73,7 @@ export function blockBuilderPlugin(options: BlockBuilderDescriptorOptions = {}):
   };
 }
 
+/** Registers the `blocks` JSON field widget with the EmDash admin runtime. */
 export function createPlugin(
   options: Pick<BlockBuilderDescriptorOptions, "adminEntry" | "i18n"> = {},
 ) {

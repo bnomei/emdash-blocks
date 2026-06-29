@@ -1,4 +1,12 @@
+/**
+ * Admin-side transforms for the block-list field editor.
+ *
+ * Normalizes stored JSON for editing, round-trips portable text through
+ * contenteditable HTML, resolves media identities, and prepares block lists for
+ * commit (synthetic id stripping, duplicate-id repair).
+ */
 import { safeLinkHref } from "./linkProtocols";
+import { normalizeHidden } from "./render";
 import { defaultBlockDefinitions, defaultPropsForDefinition } from "./schema";
 import type {
   BlockBuilderBlock,
@@ -63,6 +71,10 @@ export type PortableTextBlock = {
 };
 
 export type JsonDraftParseResult = { ok: true; value: unknown } | { ok: false; error: string };
+export type PropsDraftParseResult =
+  | { ok: true; value: BlockBuilderProps }
+  | { ok: false; error: "invalidJson"; detail: string }
+  | { ok: false; error: "propsMustBeObject" };
 
 const TEXT_NODE = 3;
 
@@ -99,29 +111,88 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export function isBlockBuilderProps(value: unknown): value is BlockBuilderProps {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+const SYNTHETIC_EDITOR_BLOCK_ID: unique symbol = Symbol("emdash-blocks.syntheticEditorBlockId");
+
+type SyntheticEditorBlock = BlockBuilderBlock & {
+  [SYNTHETIC_EDITOR_BLOCK_ID]?: true;
+};
+
+function hasSyntheticEditorBlockId(block: BlockBuilderBlock): boolean {
+  return Boolean((block as SyntheticEditorBlock)[SYNTHETIC_EDITOR_BLOCK_ID]);
+}
+
+/** Normalizes one block for display, synthesizing id/type defaults when missing. */
 export function normalizeEditorBlock(value: unknown, index: number): BlockBuilderBlock {
   const record = asRecord(value);
-  const props =
-    record.props && typeof record.props === "object" && !Array.isArray(record.props)
-      ? (record.props as Record<string, unknown>)
-      : {};
+  const props = isBlockBuilderProps(record.props) ? record.props : {};
+  const storedId = typeof record.id === "string" && record.id.length > 0 ? record.id : null;
 
-  return {
-    id: typeof record.id === "string" && record.id ? record.id : `block-${index + 1}`,
+  const block: SyntheticEditorBlock = {
+    id: storedId ?? `block-${index + 1}`,
     type: typeof record.type === "string" && record.type ? record.type : "text",
-    hidden: typeof record.hidden === "boolean" ? record.hidden : undefined,
+    hidden: normalizeHidden(record.hidden),
     props,
   };
+
+  if (!storedId) block[SYNTHETIC_EDITOR_BLOCK_ID] = true;
+  return block;
 }
 
+function isBlockRecord(value: unknown): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// Duplicate ids break React list keys for stateful per-block editors.
+function dedupeBlockIds(blocks: BlockBuilderValue): BlockBuilderValue {
+  const seen = new Set<string>();
+  return blocks.map((block, index) => {
+    if (!seen.has(block.id)) {
+      seen.add(block.id);
+      return block;
+    }
+    let uniqueId = `${block.id}-${index + 1}`;
+    while (seen.has(uniqueId)) uniqueId = `${uniqueId}-x`;
+    seen.add(uniqueId);
+    return { ...block, id: uniqueId };
+  });
+}
+
+/** Normalizes stored JSON for the admin editor, including single-object corruption shapes. */
 export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
-  return Array.isArray(value) ? value.map((item, index) => normalizeEditorBlock(item, index)) : [];
+  if (Array.isArray(value)) {
+    return dedupeBlockIds(
+      value.filter(isBlockRecord).map((item, index) => normalizeEditorBlock(item, index)),
+    );
+  }
+  // A lone block object (migration shape) becomes a one-element list instead of [].
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>).type === "string" &&
+    (value as Record<string, unknown>).type
+  ) {
+    return [normalizeEditorBlock(value, 0)];
+  }
+  return [];
 }
 
+/** Strips synthetic ids and omits falsey `hidden` before writing stored JSON. */
 export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuilderValue {
-  return nextBlocks.map((block) => ({ ...block, hidden: block.hidden || undefined }));
+  return nextBlocks.map((block) => {
+    const prepared: SyntheticEditorBlock = { ...block, hidden: block.hidden || undefined };
+    if (hasSyntheticEditorBlockId(block)) {
+      delete (prepared as { id?: string }).id;
+    }
+    delete prepared[SYNTHETIC_EDITOR_BLOCK_ID];
+    return prepared;
+  });
 }
 
+/** Merges configured, default, and in-use unknown block types for the type picker. */
 export function resolveBlockDefinitions(
   blocks: BlockBuilderValue,
   options?: BlockBuilderOptions,
@@ -161,6 +232,7 @@ export function createBlockForDefinition(
   };
 }
 
+/** Switches a block's type and resets props to the target definition's defaults. */
 export function blockWithType(
   block: BlockBuilderBlock,
   nextType: string,
@@ -174,6 +246,7 @@ export function blockWithType(
   };
 }
 
+/** Parses a JSON textarea draft; whitespace-only input yields `undefined`. */
 export function parseJsonDraft(value: string): JsonDraftParseResult {
   try {
     return { ok: true, value: value.trim() ? JSON.parse(value) : undefined };
@@ -192,14 +265,27 @@ function parseJsonValue(value: string): unknown {
 
 export function parseProps(value: string): BlockBuilderProps | null {
   const parsed = parseJsonValue(value);
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as BlockBuilderProps)
-    : null;
+  return isBlockBuilderProps(parsed) ? parsed : null;
 }
 
+export function parsePropsDraft(value: string): PropsDraftParseResult {
+  const result = parseJsonDraft(value);
+  if (!result.ok) return { ok: false, error: "invalidJson", detail: result.error };
+  if (result.value === undefined) return { ok: true, value: {} };
+  if (!isBlockBuilderProps(result.value)) return { ok: false, error: "propsMustBeObject" };
+  return { ok: true, value: result.value };
+}
+
+/** Type guard requiring a non-empty media identity (id, src, previewUrl, or storageKey). */
 export function isMediaValue(value: unknown): value is MediaValue {
   const record = asRecord(value);
-  return typeof record.id === "string" || typeof record.src === "string";
+  const identitySources = [
+    record.id,
+    record.src,
+    record.previewUrl,
+    asRecord(record.meta).storageKey,
+  ];
+  return identitySources.some((candidate) => typeof candidate === "string" && candidate.length > 0);
 }
 
 export function mediaValues(value: unknown): MediaValue[] {
@@ -220,6 +306,7 @@ export function mediaIdentity(value: MediaValue): string {
   return value.id || mediaStorageKey(value) || value.src || value.previewUrl || "";
 }
 
+/** Resolves a preview or API URL for a stored media value. */
 export function mediaUrl(value: MediaValue): string {
   if (typeof value.previewUrl === "string" && value.previewUrl) return value.previewUrl;
   if (typeof value.src === "string" && value.src) return value.src;
@@ -230,8 +317,16 @@ export function mediaUrl(value: MediaValue): string {
   return "";
 }
 
+/** Encodes a storage key for media URLs, dropping traversal segments. */
 export function encodeStorageKey(storageKey: string): string {
-  return storageKey.split("/").map(encodeURIComponent).join("/");
+  return (
+    storageKey
+      .split("/")
+      // Reject `.` and `..` so a stored key cannot escape the media file root.
+      .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
+      .map(encodeURIComponent)
+      .join("/")
+  );
 }
 
 export function mediaValueFromItem(item: MediaItem): MediaValue {
@@ -272,6 +367,7 @@ function normalizeMarkdownSource(value: string): string {
   return value.replace(/^(#{1,6})(?=\S)/gm, "$1 ");
 }
 
+/** Converts a markdown string into portable-text blocks for import and writer fields. */
 export function markdownToPortableText(value: string): PortableTextBlock[] {
   const blocks: PortableTextBlock[] = [];
   const lines = normalizeMarkdownSource(value).split("\n");
@@ -345,7 +441,9 @@ function parseInlineMarkdown(text: string): {
 } {
   const children: PortableTextSpan[] = [];
   const markDefs: PortableTextMarkDef[] = [];
-  const pattern = /(\*\*(.+?)\*\*)|(_(.+?)_)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(~~(.+?)~~)/g;
+  // Underscore emphasis requires word boundaries (CommonMark intraword rule).
+  const pattern =
+    /(\*\*(.+?)\*\*)|((?<![A-Za-z0-9])_(.+?)_(?![A-Za-z0-9]))|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(~~(.+?)~~)/g;
   let cursor = 0;
   let match: RegExpExecArray | null;
 
@@ -384,6 +482,7 @@ function makeSpan(text: string, marks: string[] = []): PortableTextSpan {
   return { _type: "span", _key: randomId("span"), text, marks };
 }
 
+/** Serializes portable text to contenteditable HTML for the admin rich-text field. */
 export function portableTextToEditorHtml(value: unknown): string {
   const blocks = portableTextBlocks(value);
   if (!blocks.length) return "";
@@ -393,7 +492,10 @@ export function portableTextToEditorHtml(value: unknown): string {
 
   for (const block of blocks) {
     if (block._type !== "block") continue;
-    const content = spansToHtml(block.children ?? [], block.markDefs ?? []);
+    const content = spansToHtml(
+      Array.isArray(block.children) ? block.children : [],
+      Array.isArray(block.markDefs) ? block.markDefs : [],
+    );
 
     if (block.listItem) {
       if (openList !== block.listItem) {
@@ -401,7 +503,9 @@ export function portableTextToEditorHtml(value: unknown): string {
         html += block.listItem === "number" ? "<ol>" : "<ul>";
         openList = block.listItem;
       }
-      html += `<li>${content}</li>`;
+      const levelAttr =
+        typeof block.level === "number" && block.level > 1 ? ` data-level="${block.level}"` : "";
+      html += `<li${levelAttr}>${content}</li>`;
       continue;
     }
 
@@ -423,20 +527,23 @@ export function portableTextToEditorHtml(value: unknown): string {
 }
 
 function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[]): string {
-  return spans
+  // Stored portable text may carry non-array children; degrade instead of throwing.
+  const safeSpans = Array.isArray(spans) ? spans : [];
+  const safeMarkDefs = Array.isArray(markDefs) ? markDefs : [];
+  return safeSpans
     .map((span) => {
-      const marks = span.marks ?? [];
+      const marks = Array.isArray(span?.marks) ? span.marks : [];
       const link = marks
-        .map((mark) => markDefs.find((definition) => definition._key === mark))
+        .map((mark) => safeMarkDefs.find((definition) => definition?._key === mark))
         .find(Boolean);
-      let html = escapeHtml(span.text ?? "");
+      let html = escapeHtml(typeof span?.text === "string" ? span.text : "");
 
       if (marks.includes("code")) html = `<code>${html}</code>`;
       if (marks.includes("strong")) html = `<strong>${html}</strong>`;
       if (marks.includes("em")) html = `<em>${html}</em>`;
       if (marks.includes("strike-through") || marks.includes("strikethrough"))
         html = `<s>${html}</s>`;
-      if (link?.href) {
+      if (typeof link?.href === "string") {
         const href = safeLinkHref(link.href);
         if (href) html = `<a href="${escapeAttribute(href)}">${html}</a>`;
       }
@@ -445,6 +552,7 @@ function spansToHtml(spans: PortableTextSpan[], markDefs: PortableTextMarkDef[])
     .join("");
 }
 
+/** Parses contenteditable HTML back into portable-text blocks on editor blur. */
 export function editorHtmlToPortableText(
   element: HTMLElement | ElementLike | null,
 ): PortableTextBlock[] {
@@ -464,6 +572,7 @@ export function editorHtmlToPortableText(
 function appendPortableTextNode(
   node: ChildNode | TextNodeLike | ElementLike,
   blocks: PortableTextBlock[],
+  level = 1,
 ) {
   if (isTextNodeLike(node) && node.nodeType === TEXT_NODE) {
     const text = node.textContent ?? "";
@@ -478,13 +587,13 @@ function appendPortableTextNode(
     const listItem = tag === "ol" ? "number" : "bullet";
     node.querySelectorAll(":scope > li").forEach((item) => {
       if (!isElementLike(item)) return;
-      blocks.push(elementToTextBlock(item, "normal", listItem));
+      appendListItem(item, blocks, listItem, level);
     });
     return;
   }
 
   if (tag === "li") {
-    blocks.push(elementToTextBlock(node, "normal", "bullet"));
+    appendListItem(node, blocks, "bullet", level);
     return;
   }
 
@@ -494,30 +603,108 @@ function appendPortableTextNode(
   }
 
   if (/^h[1-6]$/.test(tag)) {
-    blocks.push(elementToTextBlock(node, `h${Math.min(Number(tag.slice(1)), 4)}`));
+    blocks.push(elementToTextBlock(node, tag));
     return;
   }
 
   if (tag === "p" || tag === "div") {
-    blocks.push(elementToTextBlock(node));
+    appendBlockContainer(node, blocks);
     return;
   }
 
   node.childNodes.forEach((child) => appendPortableTextNode(child, blocks));
 }
 
-function elementToTextBlock(
-  element: ElementLike,
-  style = "normal",
-  listItem?: "bullet" | "number",
-): PortableTextBlock {
+function listItemLevel(element: ElementLike, fallback: number): number {
+  const raw = Number(element.getAttribute("data-level"));
+  return Number.isInteger(raw) && raw > 1 ? raw : fallback;
+}
+
+function appendListItem(
+  item: ElementLike,
+  blocks: PortableTextBlock[],
+  listItem: "bullet" | "number",
+  level: number,
+) {
+  const inlineNodes: Array<ChildNode | TextNodeLike | ElementLike> = [];
+  const nestedLists: ElementLike[] = [];
+  for (const child of Array.from(item.childNodes)) {
+    const childTag = isElementLike(child) ? child.tagName.toLowerCase() : "";
+    if (childTag === "ul" || childTag === "ol") {
+      nestedLists.push(child as ElementLike);
+    } else {
+      inlineNodes.push(child);
+    }
+  }
+
+  const itemLevel = listItemLevel(item, level);
+  const markDefs: PortableTextMarkDef[] = [];
+  const children = inlineNodesToSpans(inlineNodes, [], markDefs);
+  blocks.push({
+    _type: "block",
+    _key: randomId("pt"),
+    style: "normal",
+    listItem,
+    level: itemLevel,
+    markDefs,
+    children: children.length ? children : [makeSpan("")],
+  });
+
+  for (const nested of nestedLists) {
+    appendPortableTextNode(nested, blocks, itemLevel + 1);
+  }
+}
+
+function isBlockLevelTag(tag: string): boolean {
+  return (
+    tag === "ul" ||
+    tag === "ol" ||
+    tag === "li" ||
+    tag === "p" ||
+    tag === "div" ||
+    tag === "blockquote" ||
+    /^h[1-6]$/.test(tag)
+  );
+}
+
+function appendBlockContainer(node: ElementLike, blocks: PortableTextBlock[], style = "normal") {
+  let inlineRun: Array<ChildNode | TextNodeLike | ElementLike> = [];
+
+  const flushInlineRun = () => {
+    if (!inlineRun.length) return;
+    const markDefs: PortableTextMarkDef[] = [];
+    const children = inlineNodesToSpans(inlineRun, [], markDefs);
+    if (children.some((span) => (span.text ?? "").trim())) {
+      blocks.push({
+        _type: "block",
+        _key: randomId("pt"),
+        style,
+        markDefs,
+        children,
+      });
+    }
+    inlineRun = [];
+  };
+
+  for (const child of Array.from(node.childNodes)) {
+    const childTag = isElementLike(child) ? child.tagName.toLowerCase() : "";
+    if (childTag && isBlockLevelTag(childTag)) {
+      flushInlineRun();
+      appendPortableTextNode(child, blocks);
+    } else {
+      inlineRun.push(child);
+    }
+  }
+  flushInlineRun();
+}
+
+function elementToTextBlock(element: ElementLike, style = "normal"): PortableTextBlock {
   const markDefs: PortableTextMarkDef[] = [];
   const children = inlineNodesToSpans(Array.from(element.childNodes), [], markDefs);
   return {
     _type: "block",
     _key: randomId("pt"),
     style,
-    ...(listItem ? { listItem, level: 1 } : {}),
     markDefs,
     children: children.length ? children : [makeSpan("")],
   };

@@ -1,3 +1,9 @@
+/**
+ * Default block-type catalog and prop defaults for the block-list field.
+ *
+ * Ships built-in heading, text, image, quote, and divider definitions. Custom
+ * `blockDefinitions` merge with and override these defaults by `type`.
+ */
 import type { BlockBuilderCoreFieldType, BlockBuilderDefinition, BlockBuilderProps } from "./types";
 
 export const emdashCorePropFieldTypes: BlockBuilderCoreFieldType[] = [
@@ -65,6 +71,7 @@ export const defaultBlockDefinitions: BlockBuilderDefinition[] = [
   },
 ];
 
+/** Builds initial props from a definition's `defaultValue` fields only. */
 export function defaultPropsForDefinition(definition?: BlockBuilderDefinition): BlockBuilderProps {
   const props: BlockBuilderProps = {};
 

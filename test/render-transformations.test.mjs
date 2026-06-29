@@ -24,13 +24,28 @@ test("normalizes malformed blocks with stable fallback values", () => {
     {
       id: "block-3",
       type: "text",
-      hidden: undefined,
+      hidden: true,
       props: {},
     },
   );
 
+  assert.equal(normalizeBlock({ id: "a", type: "text", hidden: "true", props: {} }).hidden, true);
+  assert.equal(normalizeBlock({ id: "b", type: "text", hidden: "false", props: {} }).hidden, false);
+  assert.equal(normalizeBlock({ id: "c", type: "text", hidden: "0", props: {} }).hidden, false);
+  assert.equal(normalizeBlock({ id: "d", type: "text", hidden: "1", props: {} }).hidden, true);
+  assert.equal(normalizeBlock({ id: "e", type: "text", props: {} }).hidden, undefined);
+
   assert.deepEqual(normalizeBlocks(null), []);
   assert.deepEqual(normalizeBlocks(undefined), []);
+
+  assert.deepEqual(normalizeBlocks({ id: "hero-1", type: "heading", props: {} }), []);
+  assert.deepEqual(normalizeBlocks("not-an-array"), []);
+  assert.deepEqual(visibleBlocks({ id: "hero-1", type: "heading", props: {} }), []);
+
+  assert.deepEqual(
+    normalizeBlocks([{ id: "hero-1", type: "hero", props: { title: "Hi" } }, null, 5, []]),
+    [{ id: "hero-1", type: "hero", hidden: undefined, props: { title: "Hi" } }],
+  );
 });
 
 test("preserves valid block data and filters only hidden blocks", () => {

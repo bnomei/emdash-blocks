@@ -1,3 +1,9 @@
+/**
+ * Locale fallback resolution for block-field labels and admin chrome messages.
+ *
+ * `localeFallbacks` walks the configured chain; `localizedString` and `blockMessage`
+ * pick the first non-empty override before falling back to built-in English defaults.
+ */
 export type LocalizedString = string | Record<string, string | undefined>;
 
 export type BlocksMessageKey =
@@ -17,6 +23,7 @@ export type BlocksMessageKey =
   | "link"
   | "linkProtocolError"
   | "loadingMedia"
+  | "mediaLibraryTruncated"
   | "moveBlockDown"
   | "moveBlockUp"
   | "noEditableProps"
@@ -24,9 +31,11 @@ export type BlocksMessageKey =
   | "numberedList"
   | "paragraph"
   | "props"
+  | "propsMustBeObject"
   | "quote"
   | "remove"
   | "removeBlock"
+  | "repeaterMustBeArray"
   | "showBlock"
   | "type";
 
@@ -66,6 +75,7 @@ export const DEFAULT_BLOCKS_I18N = {
       linkProtocolError:
         "Links must use http:, https:, mailto:, tel:, root-relative, or relative URLs.",
       loadingMedia: "Loading media...",
+      mediaLibraryTruncated: "Only the first {count} media items are shown.",
       moveBlockDown: "Move block down",
       moveBlockUp: "Move block up",
       noEditableProps: "This block type has no editable props.",
@@ -73,9 +83,11 @@ export const DEFAULT_BLOCKS_I18N = {
       numberedList: "Numbered list",
       paragraph: "Paragraph",
       props: "Props",
+      propsMustBeObject: "Props must be a JSON object.",
       quote: "Quote",
       remove: "Remove",
       removeBlock: "Remove block",
+      repeaterMustBeArray: "This field must be a JSON array.",
       showBlock: "Show block",
       type: "Type",
     },
@@ -90,6 +102,7 @@ export function normalizeLocale(locale: string | null | undefined): string {
   return (locale ?? DEFAULT_LOCALE).trim() || DEFAULT_LOCALE;
 }
 
+/** Builds the ordered locale chain: active locale, configured fallbacks, then default. */
 export function localeFallbacks(i18n: BlocksI18nConfig | string | null | undefined): string[] {
   const config = typeof i18n === "string" ? { locale: i18n } : (i18n ?? {});
   const defaultLocale = normalizeLocale(config.defaultLocale ?? DEFAULT_BLOCKS_I18N.defaultLocale);
@@ -113,6 +126,7 @@ export function localeFallbacks(i18n: BlocksI18nConfig | string | null | undefin
   return chain;
 }
 
+/** Resolves a localized label string across the locale fallback chain. */
 export function localizedString(
   value: LocalizedString | null | undefined,
   i18n: BlocksI18nConfig | string | null | undefined,
@@ -135,18 +149,18 @@ export function localizedString(
   return first ?? fallback;
 }
 
+/** Resolves an admin UI message key across the full locale fallback chain. */
 export function blockMessage(
   key: BlocksMessageKey,
   i18n: BlocksI18nConfig | string | null | undefined,
 ): string {
   const config = typeof i18n === "string" ? { locale: i18n } : (i18n ?? {});
 
+  // Walk every fallback locale before using the built-in English default so a
+  // later-chain override is not shadowed by an empty `en` slot.
   for (const locale of localeFallbacks(config)) {
     const override = config.messages?.[locale]?.[key];
     if (typeof override === "string" && override.length > 0) return override;
-
-    const defaultMessage = DEFAULT_BLOCKS_I18N.messages.en[key];
-    if (locale === DEFAULT_LOCALE && defaultMessage) return defaultMessage;
   }
 
   const sourceOverride = config.messages?.[DEFAULT_LOCALE]?.[key];
@@ -155,6 +169,7 @@ export function blockMessage(
   return DEFAULT_BLOCKS_I18N.messages.en[key] ?? key;
 }
 
+/** Substitutes `{name}` placeholders in a resolved block message. */
 export function formatBlockMessage(
   key: BlocksMessageKey,
   i18n: BlocksI18nConfig | string | null | undefined,

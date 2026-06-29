@@ -28,6 +28,19 @@ test("block messages follow the EmDash-style fallback chain", () => {
   assert.equal(localizedString({ en: "Title", fr: "Titre" }, i18n), "Titre");
 });
 
+test("block message override on a later fallback locale is not shadowed by the en default", () => {
+  const i18n = {
+    locale: "en",
+    defaultLocale: "en",
+    fallback: { en: "brand" },
+    messages: { brand: { addBlock: "Block hinzufügen" } },
+  };
+
+  assert.deepEqual(localeFallbacks(i18n), ["en", "brand"]);
+  assert.equal(blockMessage("addBlock", i18n), "Block hinzufügen");
+  assert.equal(blockMessage("removeBlock", i18n), "Remove block");
+});
+
 test("blocks field renders localized schema and editor chrome", () => {
   const html = renderToStaticMarkup(
     React.createElement(BlocksField, {
@@ -70,4 +83,28 @@ test("blocks field renders localized schema and editor chrome", () => {
   assert.match(html, /Block ausblenden/);
   assert.match(html, /Block entfernen/);
   assert.doesNotMatch(html, /\[object Object\]/);
+});
+
+test("core image/file types render the media picker, not a text input", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(BlocksField, {
+      value: [{ id: "block-img", type: "gallery", props: {} }],
+      onChange() {},
+      options: {
+        blockDefinitions: [
+          {
+            type: "gallery",
+            label: "Gallery",
+            props: [
+              { key: "photo", label: "Photo", type: "image" },
+              { key: "attachment", label: "Attachment", type: "file" },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+
+  const noMediaCount = (html.match(/No media/g) ?? []).length;
+  assert.equal(noMediaCount, 2, "both image and file fields render a media picker");
 });

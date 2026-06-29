@@ -1,7 +1,15 @@
+/**
+ * EmDash admin field widget for editing stored block-list JSON.
+ *
+ * Renders the `blocks` JSON field: per-block type selection, schema-driven prop
+ * editors (portable text, media, JSON), and commit normalization via
+ * `prepareBlocksForChange`.
+ */
 import { Button, Input, MenuBar, Select, Switch, Textarea } from "@cloudflare/kumo";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  FileIcon,
   LinkIcon,
   ListBulletsIcon,
   ListNumbersIcon,
@@ -31,7 +39,7 @@ import {
   mediaValues,
   normalizeEditorBlocks,
   parseJsonDraft,
-  parseProps,
+  parsePropsDraft,
   portableTextToEditorHtml,
   prepareBlocksForChange,
   randomId,
@@ -270,9 +278,80 @@ function inputType(field: BlockBuilderPropField) {
 }
 
 function normalizeNumber(value: string, integer: boolean) {
-  if (value === "") return undefined;
-  const number = integer ? Number.parseInt(value, 10) : Number(value);
-  return Number.isFinite(number) ? number : undefined;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const number = Number(trimmed);
+  if (!Number.isFinite(number)) return undefined;
+  if (integer && !Number.isInteger(number)) return undefined;
+  return number;
+}
+
+// Migration JSON may store booleans as string sentinels ("false", "0", "").
+function normalizeBooleanValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized !== "" && normalized !== "false" && normalized !== "0";
+  }
+  return Boolean(value);
+}
+
+function NumberPropField({
+  field,
+  value,
+  onChange,
+  id,
+  label,
+  helpText,
+  placeholder,
+  integer,
+}: {
+  field: BlockBuilderPropField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  id: string;
+  label: string;
+  helpText: string;
+  placeholder?: string;
+  integer: boolean;
+}) {
+  // Local draft preserves partial numeric input ("-", "1.") until commit-ready.
+  const valueKey = typeof value === "number" ? String(value) : "";
+  const [draft, setDraft] = useState(() => valueKey);
+
+  useEffect(() => {
+    setDraft((current) => (normalizeNumber(current, integer) === value ? current : valueKey));
+  }, [valueKey]);
+
+  return (
+    <label key={field.key} htmlFor={id} style={fieldStyle}>
+      <span style={labelStyle}>{label}</span>
+      <Input
+        id={id}
+        aria-label={label}
+        className="w-full"
+        placeholder={placeholder}
+        type="number"
+        step={integer ? 1 : undefined}
+        value={draft}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          const next = event.currentTarget.value;
+          setDraft(next);
+          const parsed = normalizeNumber(next, integer);
+          if (next.trim() === "" || parsed !== undefined) onChange(parsed);
+        }}
+      />
+      {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
+    </label>
+  );
+}
+
+const MEDIA_LIBRARY_FETCH_LIMIT = 100;
+
+function isImageMedia(value: MediaValue): boolean {
+  if (typeof value.mimeType === "string" && value.mimeType) {
+    return value.mimeType.startsWith("image/");
+  }
+  return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(mediaUrl(value).split(/[?#]/, 1)[0] ?? "");
 }
 
 function MediaPropField({
@@ -281,6 +360,7 @@ function MediaPropField({
   onChange,
   id,
   multiple,
+  mimeTypeFilter,
   i18n,
 }: {
   field: BlockBuilderPropField;
@@ -288,10 +368,12 @@ function MediaPropField({
   onChange: (value: unknown) => void;
   id: string;
   multiple: boolean;
+  mimeTypeFilter?: string;
   i18n: BlocksI18nConfig;
 }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [truncated, setTruncated] = useState(false);
   const selected = multiple ? mediaValues(value) : mediaValues(firstMediaValue(value));
   const selectedKeys = useMemo(() => new Set(selected.map(mediaIdentity)), [selected]);
   const allItems = useMemo(() => {
@@ -319,15 +401,17 @@ function MediaPropField({
       setStatus("loading");
       try {
         const url = new URL("/_emdash/api/media", globalThis.location.origin);
-        url.searchParams.set("limit", "100");
-        url.searchParams.set("mimeType", "image/");
+        url.searchParams.set("limit", String(MEDIA_LIBRARY_FETCH_LIMIT));
+        if (mimeTypeFilter) url.searchParams.set("mimeType", mimeTypeFilter);
         const response = await fetch(url, {
           credentials: "same-origin",
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(`Media request failed: ${response.status}`);
         const body = (await response.json()) as { data?: { items?: MediaItem[] } };
-        setItems(body.data?.items ?? []);
+        const fetchedItems = body.data?.items ?? [];
+        setItems(fetchedItems);
+        setTruncated(fetchedItems.length >= MEDIA_LIBRARY_FETCH_LIMIT);
         setStatus("idle");
       } catch {
         if (!controller.signal.aborted) {
@@ -337,8 +421,18 @@ function MediaPropField({
     }
 
     void loadMedia();
-    return () => controller.abort();
-  }, []);
+
+    // Refetch on focus so uploads elsewhere in the admin session appear in the picker.
+    function handleFocus() {
+      void loadMedia();
+    }
+    globalThis.addEventListener?.("focus", handleFocus);
+
+    return () => {
+      controller.abort();
+      globalThis.removeEventListener?.("focus", handleFocus);
+    };
+  }, [mimeTypeFilter]);
 
   function selectMedia(identity: string) {
     if (!identity) {
@@ -379,8 +473,12 @@ function MediaPropField({
             const identity = mediaIdentity(item);
             return (
               <div key={identity} style={mediaPreviewStyle}>
-                {mediaUrl(item) ? (
+                {mediaUrl(item) && isImageMedia(item) ? (
                   <img src={mediaUrl(item)} alt={item.alt ?? ""} style={mediaImageStyle} />
+                ) : mediaUrl(item) ? (
+                  <div style={{ ...mediaImageStyle, display: "grid", placeItems: "center" }}>
+                    <FileIcon size={24} />
+                  </div>
                 ) : (
                   <div style={{ ...mediaImageStyle, display: "grid", placeItems: "center" }}>
                     <ImageIcon size={24} />
@@ -416,6 +514,11 @@ function MediaPropField({
       {status === "error" ? (
         <small style={helpTextStyle}>{blockMessage("couldNotLoadMedia", i18n)}</small>
       ) : null}
+      {truncated ? (
+        <small style={helpTextStyle}>
+          {formatBlockMessage("mediaLibraryTruncated", i18n, { count: MEDIA_LIBRARY_FETCH_LIMIT })}
+        </small>
+      ) : null}
       {field.helpText ? (
         <small style={helpTextStyle}>{localizedString(field.helpText, i18n)}</small>
       ) : null}
@@ -439,16 +542,36 @@ function PortableTextPropField({
   const valueKey = JSON.stringify(value ?? null);
   const editorRef = useRef<HTMLDivElement>(null);
   const [html, setHtml] = useState(() => portableTextToEditorHtml(value));
+  // Set when a newer external value arrives during a focused edit; blur resyncs instead of committing stale DOM.
+  const externalUpdateWhileFocusedRef = useRef(false);
+  const pendingExternalHtmlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const nextHtml = portableTextToEditorHtml(value);
-    setHtml(nextHtml);
-    if (editorRef.current && globalThis.document?.activeElement !== editorRef.current) {
-      editorRef.current.innerHTML = nextHtml;
+    if (editorRef.current && globalThis.document?.activeElement === editorRef.current) {
+      externalUpdateWhileFocusedRef.current = true;
+      pendingExternalHtmlRef.current = nextHtml;
+      return;
     }
+    externalUpdateWhileFocusedRef.current = false;
+    pendingExternalHtmlRef.current = null;
+    setHtml(nextHtml);
+    if (editorRef.current) editorRef.current.innerHTML = nextHtml;
   }, [valueKey]);
 
+  function syncFromExternalHtml() {
+    const syncedHtml = pendingExternalHtmlRef.current ?? portableTextToEditorHtml(value);
+    externalUpdateWhileFocusedRef.current = false;
+    pendingExternalHtmlRef.current = null;
+    setHtml(syncedHtml);
+    if (editorRef.current) editorRef.current.innerHTML = syncedHtml;
+  }
+
   function commit() {
+    if (externalUpdateWhileFocusedRef.current) {
+      syncFromExternalHtml();
+      return;
+    }
     const nextValue = editorHtmlToPortableText(editorRef.current);
     onChange(nextValue);
   }
@@ -460,6 +583,11 @@ function PortableTextPropField({
   }
 
   function createLink() {
+    // prompt() blurs the editor; restore the selection before createLink runs.
+    const selection = globalThis.getSelection?.();
+    const savedRange =
+      selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+
     const href = editorCommandAdapter.requestLinkHref();
     if (!href) return;
     const safeHref = safeLinkHref(href);
@@ -467,6 +595,14 @@ function PortableTextPropField({
       globalThis.alert?.(blockMessage("linkProtocolError", i18n));
       return;
     }
+
+    if (savedRange) {
+      editorRef.current?.focus();
+      const restored = globalThis.getSelection?.();
+      restored?.removeAllRanges();
+      restored?.addRange(savedRange);
+    }
+
     runCommand("createLink", safeHref);
   }
 
@@ -544,7 +680,9 @@ function PortableTextPropField({
           suppressContentEditableWarning
           style={writerSurfaceStyle}
           data-empty={!html.trim() ? "true" : undefined}
-          onInput={() => setHtml(editorRef.current?.innerHTML ?? "")}
+          onInput={() => {
+            setHtml(editorRef.current?.innerHTML ?? "");
+          }}
           onBlur={commit}
           dangerouslySetInnerHTML={{ __html: html }}
         />
@@ -579,7 +717,7 @@ function renderPropField(
         </span>
         <Switch
           aria-label={label}
-          checked={Boolean(value)}
+          checked={normalizeBooleanValue(value)}
           controlFirst={false}
           variant="neutral"
           onCheckedChange={(checked) => onChange(Boolean(checked))}
@@ -685,13 +823,13 @@ function renderPropField(
     );
   }
 
-  if (type === "json" || type === "repeater") {
+  if (type === "json" || type === "repeater" || type === "reference") {
     const fallback =
       type === "repeater" ? blockMessage("jsonStringArray", i18n) : blockMessage("jsonValue", i18n);
     return renderJsonLikePropField(field, value, onChange, id, fallback, i18n);
   }
 
-  if (type === "media" || type === "media-list") {
+  if (type === "media" || type === "media-list" || type === "image" || type === "file") {
     return (
       <MediaPropField
         key={field.key}
@@ -700,7 +838,24 @@ function renderPropField(
         onChange={onChange}
         id={id}
         multiple={type === "media-list"}
+        mimeTypeFilter={type === "file" ? undefined : "image/"}
         i18n={i18n}
+      />
+    );
+  }
+
+  if (type === "number" || type === "integer") {
+    return (
+      <NumberPropField
+        key={field.key}
+        field={field}
+        value={value}
+        onChange={onChange}
+        id={id}
+        label={label}
+        helpText={helpText}
+        placeholder={placeholder}
+        integer={type === "integer"}
       />
     );
   }
@@ -714,15 +869,8 @@ function renderPropField(
         className="w-full"
         placeholder={placeholder}
         type={inputType(field)}
-        step={type === "integer" ? 1 : undefined}
         value={stringValue}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          if (type === "number" || type === "integer") {
-            onChange(normalizeNumber(event.currentTarget.value, type === "integer"));
-          } else {
-            onChange(event.currentTarget.value);
-          }
-        }}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.currentTarget.value)}
       />
       {helpText ? <small style={helpTextStyle}>{helpText}</small> : null}
     </label>
@@ -749,20 +897,56 @@ function JsonLikePropField({
     value === undefined ? "" : JSON.stringify(value, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
+  const focusedRef = useRef(false);
+  const externalUpdateWhileFocusedRef = useRef(false);
 
   useEffect(() => {
+    // Skip resync while focused so an in-progress JSON draft is not clobbered.
+    if (focusedRef.current) {
+      externalUpdateWhileFocusedRef.current = true;
+      return;
+    }
+    externalUpdateWhileFocusedRef.current = false;
     setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
     setParseError(null);
   }, [valueKey]);
 
+  function syncDraftFromExternalValue() {
+    externalUpdateWhileFocusedRef.current = false;
+    setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
+    setParseError(null);
+  }
+
   function commit(nextDraft: string) {
-    const result = parseJsonDraft(nextDraft);
-    if (result.ok) {
-      setParseError(null);
-      onChange(result.value);
-    } else {
-      setParseError(result.error);
+    if (externalUpdateWhileFocusedRef.current) {
+      syncDraftFromExternalValue();
+      return;
     }
+    const result = parseJsonDraft(nextDraft);
+    if (!result.ok) {
+      setParseError(formatBlockMessage("invalidJson", i18n, { error: result.error }));
+      return;
+    }
+    if (field.type === "repeater") {
+      // Repeater props are array-shaped; clear commits [] not undefined.
+      if (result.value === undefined || result.value === null) {
+        setParseError(null);
+        onChange([]);
+        return;
+      }
+      if (!Array.isArray(result.value)) {
+        setParseError(blockMessage("repeaterMustBeArray", i18n));
+        return;
+      }
+    }
+    // Clearing a json field commits {} to preserve the object prop shape.
+    if (field.type === "json" && result.value === undefined) {
+      setParseError(null);
+      onChange({});
+      return;
+    }
+    setParseError(null);
+    onChange(result.value);
   }
 
   return (
@@ -776,15 +960,21 @@ function JsonLikePropField({
         className="min-h-24 w-full font-mono text-sm"
         placeholder={localizedString(field.placeholder, i18n) || undefined}
         value={draft}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
           setDraft(event.currentTarget.value);
           if (parseError) commit(event.currentTarget.value);
         }}
-        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => commit(event.currentTarget.value)}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          focusedRef.current = false;
+          commit(event.currentTarget.value);
+        }}
       />
       {parseError ? (
         <small id={`${id}-json-error`} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
-          {formatBlockMessage("invalidJson", i18n, { error: parseError })}
+          {parseError}
         </small>
       ) : null}
       <small style={helpTextStyle}>
@@ -815,6 +1005,67 @@ function renderJsonLikePropField(
   );
 }
 
+function RawPropsField({
+  props,
+  onChange,
+  idPrefix,
+  i18n,
+}: {
+  props: BlockBuilderProps;
+  onChange: (value: BlockBuilderProps) => void;
+  idPrefix: string;
+  i18n: BlocksI18nConfig;
+}) {
+  // Controlled fallback editor: resyncs when block type change resets props.
+  const valueKey = JSON.stringify(props ?? {});
+  const [draft, setDraft] = useState(() => JSON.stringify(props ?? {}, null, 2));
+  const [parseError, setParseError] = useState<string | null>(null);
+  const errorId = `${idPrefix}-props-error`;
+
+  useEffect(() => {
+    setDraft(JSON.stringify(props ?? {}, null, 2));
+    setParseError(null);
+  }, [valueKey]);
+
+  function commit(nextDraft: string) {
+    const result = parsePropsDraft(nextDraft);
+    if (!result.ok) {
+      setParseError(
+        result.error === "invalidJson"
+          ? formatBlockMessage("invalidJson", i18n, { error: result.detail })
+          : blockMessage("propsMustBeObject", i18n),
+      );
+      return;
+    }
+    setParseError(null);
+    onChange(result.value);
+  }
+
+  return (
+    <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
+      <span style={labelStyle}>{blockMessage("props", i18n)}</span>
+      <Textarea
+        id={`${idPrefix}-props`}
+        aria-label={blockMessage("blockProps", i18n)}
+        aria-invalid={parseError ? true : undefined}
+        aria-describedby={parseError ? errorId : undefined}
+        className="min-h-28 w-full font-mono text-sm"
+        value={draft}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+          setDraft(event.currentTarget.value);
+          if (parseError) commit(event.currentTarget.value);
+        }}
+        onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => commit(event.currentTarget.value)}
+      />
+      {parseError ? (
+        <small id={errorId} role="alert" style={{ ...helpTextStyle, color: "#b42318" }}>
+          {parseError}
+        </small>
+      ) : null}
+    </label>
+  );
+}
+
 function renderPropsEditor(
   definition: BlockBuilderDefinition | undefined,
   props: BlockBuilderProps,
@@ -823,21 +1074,7 @@ function renderPropsEditor(
   i18n: BlocksI18nConfig,
 ) {
   if (!definition?.props) {
-    return (
-      <label htmlFor={`${idPrefix}-props`} style={fieldStyle}>
-        <span style={labelStyle}>{blockMessage("props", i18n)}</span>
-        <Textarea
-          id={`${idPrefix}-props`}
-          aria-label={blockMessage("blockProps", i18n)}
-          className="min-h-28 w-full font-mono text-sm"
-          defaultValue={JSON.stringify(props ?? {}, null, 2)}
-          onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
-            const nextProps = parseProps(event.currentTarget.value);
-            if (nextProps) onChange(nextProps);
-          }}
-        />
-      </label>
-    );
+    return <RawPropsField props={props} onChange={onChange} idPrefix={idPrefix} i18n={i18n} />;
   }
 
   if (!definition.props.length) {
@@ -859,6 +1096,7 @@ function renderPropsEditor(
   );
 }
 
+/** EmDash field widget entry point for JSON block-list values. */
 export function BlocksField({
   value,
   onChange,
@@ -997,6 +1235,7 @@ export function BlocksField({
   );
 }
 
+/** Field widget map registered with the EmDash admin runtime. */
 export const fields = {
   blocks: BlocksField,
 };
