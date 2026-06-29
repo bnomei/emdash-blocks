@@ -1,6 +1,6 @@
 {
   "name": "@bnomei/emdash-blocks",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "JSON block-list field widget for EmDash entries, with normalized block props and visibility state.",
   "keywords": [
     "astro",

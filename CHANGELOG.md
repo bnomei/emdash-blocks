@@ -4,6 +4,18 @@ All notable changes to this package will be documented in this file.
 
 This project follows semantic versioning.
 
+## 0.2.1 - 2026-06-29
+
+- Hardened focused admin editors so stale JSON and portable-text drafts do not
+  overwrite newer external values.
+- Improved media and file props with file-aware picker behavior, storage-key and
+  preview URL identity fallbacks, and safer media file URL encoding.
+- Tightened block normalization for malformed stored data, duplicate or missing
+  block IDs, hidden values, numeric props, repeater/json props, and unsafe link
+  protocols.
+- Preserved portable-text heading and list structure across editor round trips
+  and expanded regression coverage.
+
 ## 0.2.0 - 2026-06-18
 
 - Added EmDash-shaped `i18n` options with `locale`, `defaultLocale`,
