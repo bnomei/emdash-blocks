@@ -135,14 +135,23 @@ test("normalizes editor block defaults and submission visibility", () => {
     { id: "block-1", type: "text", props: { text: "Hello" } },
     { id: "kept-id", type: "text", props: {} },
   ]);
-  assert.equal("id" in prepared[0], false);
-  assert.deepEqual(prepared[0], { type: "text", hidden: undefined, props: { text: "Hello" } });
+  assert.equal(prepared[0].id, "block-1");
+  assert.deepEqual(prepared[0], {
+    id: "block-1",
+    type: "text",
+    hidden: undefined,
+    props: { text: "Hello" },
+  });
   assert.equal(prepared[1].id, "kept-id");
 
   const roundTripped = prepareBlocksForChange(
-    normalizeEditorBlocks([{ type: "text", props: { text: "Imported" } }]),
+    normalizeEditorBlocks([{ type: "text", props: { text: "Imported" } }]).map((block) => ({
+      ...block,
+      props: { text: "Edited" },
+    })),
   );
   assert.equal("id" in roundTripped[0], false);
+  assert.equal(roundTripped[0].props.text, "Edited");
 });
 
 test("normalizeEditorBlocks preserves a single stored block object", () => {
@@ -243,6 +252,8 @@ test("normalizes media values from stored values and API items", () => {
   assert.deepEqual(mediaValues([{ id: "", meta: { storageKey: "k" } }]), [
     { id: "", meta: { storageKey: "k" } },
   ]);
+  assert.deepEqual(mediaValues([{ meta: { storageKey: "k" } }]), [{ meta: { storageKey: "k" } }]);
+  assert.deepEqual(mediaValues([{ previewUrl: "/preview.jpg" }]), [{ previewUrl: "/preview.jpg" }]);
 });
 
 test("converts markdown source to portable text blocks", () => {
@@ -339,7 +350,12 @@ test("portableTextToEditorHtml tolerates malformed stored blocks without throwin
     portableTextToEditorHtml([
       { _type: "block", _key: "k1", children: "oops" },
       { _type: "block", _key: "k2", children: [{ _type: "span", _key: "s", text: 5 }] },
-      { _type: "block", _key: "k3", markDefs: "x", children: [{ _type: "span", _key: "s2", text: "hi", marks: ["m"] }] },
+      {
+        _type: "block",
+        _key: "k3",
+        markDefs: "x",
+        children: [{ _type: "span", _key: "s2", text: "hi", marks: ["m"] }],
+      },
       { _type: "block", _key: "k4", children: [null, { _type: "span", _key: "s3", text: "ok" }] },
       {
         _type: "block",
@@ -451,10 +467,7 @@ test("keeps nested list items as their own blocks instead of fusing into parent"
     const blocks = editorHtmlToPortableText(
       element("div", [
         element("ul", [
-          element("li", [
-            text("Parent"),
-            element("ul", [element("li", [text("Child")])]),
-          ]),
+          element("li", [text("Parent"), element("ul", [element("li", [text("Child")])])]),
         ]),
       ]),
     );
@@ -506,10 +519,7 @@ test("preserves h5 and h6 heading levels on editor HTML round-trip", () => {
 
   try {
     const blocks = editorHtmlToPortableText(
-      element("div", [
-        element("h5", [text("Five")]),
-        element("h6", [text("Six")]),
-      ]),
+      element("div", [element("h5", [text("Five")]), element("h6", [text("Six")])]),
     );
 
     assert.equal(blocks[0].style, "h5");

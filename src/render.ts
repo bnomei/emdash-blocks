@@ -17,10 +17,7 @@ export function normalizeHidden(value: unknown): boolean | undefined {
     const normalized = value.trim().toLowerCase();
     if (normalized === "") return undefined;
     return (
-      normalized !== "false" &&
-      normalized !== "0" &&
-      normalized !== "no" &&
-      normalized !== "off"
+      normalized !== "false" && normalized !== "0" && normalized !== "no" && normalized !== "off"
     );
   }
   return undefined;
@@ -36,7 +33,7 @@ export function isBlockBuilderBlock(value: unknown): value is BlockBuilderBlock 
 }
 
 /** Fills missing id, type, and props on one block without dropping unknown fields. */
-export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilderBlock {
+export function normalizeBlock(value: unknown, index = 0): BlockBuilderBlock {
   const record: Record<string, unknown> = isRecord(value) ? value : {};
   const props = isRecord(record.props) ? record.props : {};
 
@@ -49,14 +46,14 @@ export function normalizeBlock(value: BlockBuilderBlock, index = 0): BlockBuilde
 }
 
 /** Normalizes an array of blocks; non-arrays and non-record slots become `[]`. */
-export function normalizeBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
+export function normalizeBlocks(blocks?: unknown): BlockBuilderValue {
   return Array.isArray(blocks)
     ? blocks.filter(isRecord).map((block, index) => normalizeBlock(block, index))
     : [];
 }
 
 /** Returns normalized blocks with `hidden` entries removed for render output. */
-export function visibleBlocks(blocks?: BlockBuilderValue | null): BlockBuilderValue {
+export function visibleBlocks(blocks?: unknown): BlockBuilderValue {
   return normalizeBlocks(blocks).filter((block) => !block.hidden);
 }
 

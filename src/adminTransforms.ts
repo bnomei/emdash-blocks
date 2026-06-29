@@ -115,17 +115,31 @@ export function isBlockBuilderProps(value: unknown): value is BlockBuilderProps 
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const SYNTHETIC_EDITOR_BLOCK_ID: unique symbol = Symbol("emdash-blocks.syntheticEditorBlockId");
+
+type SyntheticEditorBlock = BlockBuilderBlock & {
+  [SYNTHETIC_EDITOR_BLOCK_ID]?: true;
+};
+
+function hasSyntheticEditorBlockId(block: BlockBuilderBlock): boolean {
+  return Boolean((block as SyntheticEditorBlock)[SYNTHETIC_EDITOR_BLOCK_ID]);
+}
+
 /** Normalizes one block for display, synthesizing id/type defaults when missing. */
 export function normalizeEditorBlock(value: unknown, index: number): BlockBuilderBlock {
   const record = asRecord(value);
   const props = isBlockBuilderProps(record.props) ? record.props : {};
+  const storedId = typeof record.id === "string" && record.id.length > 0 ? record.id : null;
 
-  return {
-    id: typeof record.id === "string" && record.id ? record.id : `block-${index + 1}`,
+  const block: SyntheticEditorBlock = {
+    id: storedId ?? `block-${index + 1}`,
     type: typeof record.type === "string" && record.type ? record.type : "text",
     hidden: normalizeHidden(record.hidden),
     props,
   };
+
+  if (!storedId) block[SYNTHETIC_EDITOR_BLOCK_ID] = true;
+  return block;
 }
 
 function isBlockRecord(value: unknown): boolean {
@@ -166,16 +180,14 @@ export function normalizeEditorBlocks(value: unknown): BlockBuilderValue {
   return [];
 }
 
-// Display-only ids assigned to imported id-less blocks; never persisted on commit.
-const SYNTHETIC_BLOCK_ID = /^block-\d+$/;
-
 /** Strips synthetic ids and omits falsey `hidden` before writing stored JSON. */
 export function prepareBlocksForChange(nextBlocks: BlockBuilderValue): BlockBuilderValue {
   return nextBlocks.map((block) => {
-    const prepared: BlockBuilderBlock = { ...block, hidden: block.hidden || undefined };
-    if (SYNTHETIC_BLOCK_ID.test(prepared.id)) {
+    const prepared: SyntheticEditorBlock = { ...block, hidden: block.hidden || undefined };
+    if (hasSyntheticEditorBlockId(block)) {
       delete (prepared as { id?: string }).id;
     }
+    delete prepared[SYNTHETIC_EDITOR_BLOCK_ID];
     return prepared;
   });
 }
@@ -267,8 +279,12 @@ export function parsePropsDraft(value: string): PropsDraftParseResult {
 /** Type guard requiring a non-empty media identity (id, src, previewUrl, or storageKey). */
 export function isMediaValue(value: unknown): value is MediaValue {
   const record = asRecord(value);
-  if (typeof record.id !== "string" && typeof record.src !== "string") return false;
-  const identitySources = [record.id, record.src, record.previewUrl, asRecord(record.meta).storageKey];
+  const identitySources = [
+    record.id,
+    record.src,
+    record.previewUrl,
+    asRecord(record.meta).storageKey,
+  ];
   return identitySources.some((candidate) => typeof candidate === "string" && candidate.length > 0);
 }
 
@@ -303,12 +319,14 @@ export function mediaUrl(value: MediaValue): string {
 
 /** Encodes a storage key for media URLs, dropping traversal segments. */
 export function encodeStorageKey(storageKey: string): string {
-  return storageKey
-    .split("/")
-    // Reject `.` and `..` so a stored key cannot escape the media file root.
-    .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
-    .map(encodeURIComponent)
-    .join("/");
+  return (
+    storageKey
+      .split("/")
+      // Reject `.` and `..` so a stored key cannot escape the media file root.
+      .filter((segment) => segment !== "" && segment !== "." && segment !== "..")
+      .map(encodeURIComponent)
+      .join("/")
+  );
 }
 
 export function mediaValueFromItem(item: MediaItem): MediaValue {

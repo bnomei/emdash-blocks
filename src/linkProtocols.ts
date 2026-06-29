@@ -16,25 +16,22 @@ const namedSchemeEntities: Record<string, string> = {
 };
 
 function decodeHtmlEntities(value: string): string {
-  return value.replace(
-    /&(#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);?/g,
-    (match, body: string) => {
-      if (body[0] === "#") {
-        const isHex = body[1] === "x" || body[1] === "X";
-        const codePoint = Number.parseInt(body.slice(isHex ? 2 : 1), isHex ? 16 : 10);
-        if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
-          return match;
-        }
-        try {
-          return String.fromCodePoint(codePoint);
-        } catch {
-          return match;
-        }
+  return value.replace(/&(#[xX]?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);?/g, (match, body: string) => {
+    if (body[0] === "#") {
+      const isHex = body[1] === "x" || body[1] === "X";
+      const codePoint = Number.parseInt(body.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+        return match;
       }
-      const named = namedSchemeEntities[body.toLowerCase()];
-      return named ?? match;
-    },
-  );
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    }
+    const named = namedSchemeEntities[body.toLowerCase()];
+    return named ?? match;
+  });
 }
 
 function stripInvisibleCharacters(value: string): string {
@@ -58,9 +55,7 @@ export function isSafeLinkHref(value: string): boolean {
 
   // Scheme and protocol-relative checks share one canonical form so obfuscation
   // cannot satisfy one guard while bypassing the other.
-  const normalizedHref = stripInvisibleCharacters(
-    decodePercentEncoding(decodeHtmlEntities(href)),
-  );
+  const normalizedHref = stripInvisibleCharacters(decodePercentEncoding(decodeHtmlEntities(href)));
   if (!normalizedHref) return false;
 
   const slashNormalizedHref = normalizedHref.replace(/\\/g, "/");

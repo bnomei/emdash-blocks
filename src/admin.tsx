@@ -9,6 +9,7 @@ import { Button, Input, MenuBar, Select, Switch, Textarea } from "@cloudflare/ku
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  FileIcon,
   LinkIcon,
   ListBulletsIcon,
   ListNumbersIcon,
@@ -279,8 +280,10 @@ function inputType(field: BlockBuilderPropField) {
 function normalizeNumber(value: string, integer: boolean) {
   const trimmed = value.trim();
   if (trimmed === "") return undefined;
-  const number = integer ? Number.parseInt(trimmed, 10) : Number(trimmed);
-  return Number.isFinite(number) ? number : undefined;
+  const number = Number(trimmed);
+  if (!Number.isFinite(number)) return undefined;
+  if (integer && !Number.isInteger(number)) return undefined;
+  return number;
 }
 
 // Migration JSON may store booleans as string sentinels ("false", "0", "").
@@ -344,12 +347,20 @@ function NumberPropField({
 
 const MEDIA_LIBRARY_FETCH_LIMIT = 100;
 
+function isImageMedia(value: MediaValue): boolean {
+  if (typeof value.mimeType === "string" && value.mimeType) {
+    return value.mimeType.startsWith("image/");
+  }
+  return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(mediaUrl(value).split(/[?#]/, 1)[0] ?? "");
+}
+
 function MediaPropField({
   field,
   value,
   onChange,
   id,
   multiple,
+  mimeTypeFilter,
   i18n,
 }: {
   field: BlockBuilderPropField;
@@ -357,6 +368,7 @@ function MediaPropField({
   onChange: (value: unknown) => void;
   id: string;
   multiple: boolean;
+  mimeTypeFilter?: string;
   i18n: BlocksI18nConfig;
 }) {
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -390,7 +402,7 @@ function MediaPropField({
       try {
         const url = new URL("/_emdash/api/media", globalThis.location.origin);
         url.searchParams.set("limit", String(MEDIA_LIBRARY_FETCH_LIMIT));
-        url.searchParams.set("mimeType", "image/");
+        if (mimeTypeFilter) url.searchParams.set("mimeType", mimeTypeFilter);
         const response = await fetch(url, {
           credentials: "same-origin",
           signal: controller.signal,
@@ -420,7 +432,7 @@ function MediaPropField({
       controller.abort();
       globalThis.removeEventListener?.("focus", handleFocus);
     };
-  }, []);
+  }, [mimeTypeFilter]);
 
   function selectMedia(identity: string) {
     if (!identity) {
@@ -461,8 +473,12 @@ function MediaPropField({
             const identity = mediaIdentity(item);
             return (
               <div key={identity} style={mediaPreviewStyle}>
-                {mediaUrl(item) ? (
+                {mediaUrl(item) && isImageMedia(item) ? (
                   <img src={mediaUrl(item)} alt={item.alt ?? ""} style={mediaImageStyle} />
+                ) : mediaUrl(item) ? (
+                  <div style={{ ...mediaImageStyle, display: "grid", placeItems: "center" }}>
+                    <FileIcon size={24} />
+                  </div>
                 ) : (
                   <div style={{ ...mediaImageStyle, display: "grid", placeItems: "center" }}>
                     <ImageIcon size={24} />
@@ -528,23 +544,32 @@ function PortableTextPropField({
   const [html, setHtml] = useState(() => portableTextToEditorHtml(value));
   // Set when a newer external value arrives during a focused edit; blur resyncs instead of committing stale DOM.
   const externalUpdateWhileFocusedRef = useRef(false);
+  const pendingExternalHtmlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const nextHtml = portableTextToEditorHtml(value);
-    setHtml(nextHtml);
-    if (editorRef.current && globalThis.document?.activeElement !== editorRef.current) {
-      editorRef.current.innerHTML = nextHtml;
-    } else if (editorRef.current) {
+    if (editorRef.current && globalThis.document?.activeElement === editorRef.current) {
       externalUpdateWhileFocusedRef.current = true;
+      pendingExternalHtmlRef.current = nextHtml;
+      return;
     }
+    externalUpdateWhileFocusedRef.current = false;
+    pendingExternalHtmlRef.current = null;
+    setHtml(nextHtml);
+    if (editorRef.current) editorRef.current.innerHTML = nextHtml;
   }, [valueKey]);
+
+  function syncFromExternalHtml() {
+    const syncedHtml = pendingExternalHtmlRef.current ?? portableTextToEditorHtml(value);
+    externalUpdateWhileFocusedRef.current = false;
+    pendingExternalHtmlRef.current = null;
+    setHtml(syncedHtml);
+    if (editorRef.current) editorRef.current.innerHTML = syncedHtml;
+  }
 
   function commit() {
     if (externalUpdateWhileFocusedRef.current) {
-      externalUpdateWhileFocusedRef.current = false;
-      const syncedHtml = portableTextToEditorHtml(value);
-      setHtml(syncedHtml);
-      if (editorRef.current) editorRef.current.innerHTML = syncedHtml;
+      syncFromExternalHtml();
       return;
     }
     const nextValue = editorHtmlToPortableText(editorRef.current);
@@ -552,7 +577,6 @@ function PortableTextPropField({
   }
 
   function runCommand(command: string, commandValue?: string) {
-    externalUpdateWhileFocusedRef.current = false;
     editorCommandAdapter.dispatchCommand(editorRef.current, command, commandValue);
     setHtml(editorRef.current?.innerHTML ?? "");
     commit();
@@ -656,11 +680,7 @@ function PortableTextPropField({
           suppressContentEditableWarning
           style={writerSurfaceStyle}
           data-empty={!html.trim() ? "true" : undefined}
-          onFocus={() => {
-            externalUpdateWhileFocusedRef.current = false;
-          }}
           onInput={() => {
-            externalUpdateWhileFocusedRef.current = false;
             setHtml(editorRef.current?.innerHTML ?? "");
           }}
           onBlur={commit}
@@ -818,6 +838,7 @@ function renderPropField(
         onChange={onChange}
         id={id}
         multiple={type === "media-list"}
+        mimeTypeFilter={type === "file" ? undefined : "image/"}
         i18n={i18n}
       />
     );
@@ -877,15 +898,30 @@ function JsonLikePropField({
   );
   const [parseError, setParseError] = useState<string | null>(null);
   const focusedRef = useRef(false);
+  const externalUpdateWhileFocusedRef = useRef(false);
 
   useEffect(() => {
     // Skip resync while focused so an in-progress JSON draft is not clobbered.
-    if (focusedRef.current) return;
+    if (focusedRef.current) {
+      externalUpdateWhileFocusedRef.current = true;
+      return;
+    }
+    externalUpdateWhileFocusedRef.current = false;
     setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
     setParseError(null);
   }, [valueKey]);
 
+  function syncDraftFromExternalValue() {
+    externalUpdateWhileFocusedRef.current = false;
+    setDraft(value === undefined ? "" : JSON.stringify(value, null, 2));
+    setParseError(null);
+  }
+
   function commit(nextDraft: string) {
+    if (externalUpdateWhileFocusedRef.current) {
+      syncDraftFromExternalValue();
+      return;
+    }
     const result = parseJsonDraft(nextDraft);
     if (!result.ok) {
       setParseError(formatBlockMessage("invalidJson", i18n, { error: result.error }));
@@ -1038,9 +1074,7 @@ function renderPropsEditor(
   i18n: BlocksI18nConfig,
 ) {
   if (!definition?.props) {
-    return (
-      <RawPropsField props={props} onChange={onChange} idPrefix={idPrefix} i18n={i18n} />
-    );
+    return <RawPropsField props={props} onChange={onChange} idPrefix={idPrefix} i18n={i18n} />;
   }
 
   if (!definition.props.length) {
