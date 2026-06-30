@@ -51,6 +51,14 @@ export default {
 
 Use the widget on an EmDash `json` field:
 
+Block configuration belongs to the field's `options` object. The Astro plugin
+configuration registers the widget; it does not provide per-field block schemas.
+
+Use `options.blockTypes` when you only need a compact type catalog for the block
+type dropdown. Built-in block types still use their built-in prop fields. Use
+`options.blockDefinitions` when the editor should render project-specific typed
+prop controls and defaults for each block type.
+
 ```json
 {
   "slug": "blocks",
@@ -67,9 +75,9 @@ Use the widget on an EmDash `json` field:
 }
 ```
 
-Use `blockDefinitions` when the editor should render typed prop controls instead
-of the raw JSON fallback. TypeScript schemas can import `BlockBuilderOptions`
-from the public package entry to type field options:
+Use `blockDefinitions` when the editor should render project-specific typed prop
+controls instead of only selecting block types. TypeScript schemas can import
+`BlockBuilderOptions` from the public package entry to type field options:
 
 ```ts
 import type { BlockBuilderOptions } from "@bnomei/emdash-blocks";
@@ -91,6 +99,14 @@ const blockOptions: BlockBuilderOptions = {
       ],
     },
   ],
+};
+
+const blocksField = {
+  slug: "blocks",
+  label: "Blocks",
+  type: "json",
+  widget: "block-builder:blocks",
+  options: blockOptions,
 };
 ```
 
